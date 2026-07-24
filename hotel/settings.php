@@ -4,18 +4,20 @@ require_once 'db.php';
 require_once 'auth_guard.php';
 
 $user_id = $_SESSION['hm_id'] ?? 0;
-$manager = ['first_name'=>'', 'last_name'=>'', 'email'=>'', 'mobile'=>''];
+$manager = ['first_name'=>'', 'last_name'=>'', 'email'=>'', 'mobile'=>'', 'role'=>'hotel_manager'];
 $msg = '';
 $msg_type = '';
 
 if ($user_id) {
-    $stmt = mysqli_prepare($conn, "SELECT first_name, last_name, email, mobile FROM users WHERE id = ? LIMIT 1");
+    $stmt = mysqli_prepare($conn, "SELECT first_name, last_name, email, mobile, role FROM users WHERE id = ? LIMIT 1");
     mysqli_stmt_bind_param($stmt, 'i', $user_id);
     mysqli_stmt_execute($stmt);
     $res = mysqli_stmt_get_result($stmt);
     $manager = mysqli_fetch_assoc($res) ?: $manager;
     mysqli_stmt_close($stmt);
 }
+
+$manager_role = $manager ? ucwords(str_replace('_', ' ', $manager['role'])) : 'Hotel Manager';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
@@ -128,7 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <div class="ds-foot">
     <a href="manage-hotel-listing.php" class="ds-hpill">
       <img src="https://images.unsplash.com/photo-1566073771259-6a8506099945?w=80&q=80" alt=""/>
-      <div><div class="ds-hpill-name"><?php echo htmlspecialchars($manager['first_name'] . ' ' . $manager['last_name']); ?></div><div class="ds-hpill-status">Hotel Manager</div></div>
+      <div><div class="ds-hpill-name"><?php echo htmlspecialchars($manager['first_name'] . ' ' . $manager['last_name']); ?></div><div class="ds-hpill-status"><?= htmlspecialchars($manager_role) ?></div></div>
     </a>
   </div>
 </aside>

@@ -41,7 +41,7 @@ function bhSeedHotels(): void {
 // ── Fetch all active hotels (with optional filters) ───────────────────────
 function bhGetHotels(string $city = '', int $guests = 0, float $maxPrice = 0, float $minRating = 0): array {
     global $conn;
-    $where = ["availability_status = 'active'"];
+    $where = ["availability_status = 'active'", "approval_status = 'approved'"];
     $params = [];
     $types  = '';
 
@@ -229,6 +229,152 @@ function bhHandleImageUpload(string $field, int $hotelId = 0): string {
         return 'uploads/hotels/' . $filename;
     }
     return '';
+}
+
+// ── Fetch all Available rooms for a hotel (Customer Portal) ─────────────────
+function bhGetRoomsByHotel(int $hotel_id, bool $available_only = false): array {
+    global $conn;
+    $rooms = [];
+    if (!$conn || $hotel_id <= 0) return $rooms;
+    $where = 'hotel_id = ?';
+    if ($available_only) {
+        $where .= " AND status = 'Available'";
+    }
+    $stmt = mysqli_prepare($conn, "SELECT * FROM rooms WHERE $where ORDER BY CAST(room_number AS UNSIGNED), room_number ASC");
+    if (!$stmt) return $rooms;
+    mysqli_stmt_bind_param($stmt, 'i', $hotel_id);
+    mysqli_stmt_execute($stmt);
+    $res = mysqli_stmt_get_result($stmt);
+    if ($res) {
+        while ($row = mysqli_fetch_assoc($res)) $rooms[] = $row;
+    }
+    mysqli_stmt_close($stmt);
+    return $rooms;
+}
+
+// ── Fetch single room by ID ────────────────────────────────────────────────
+function bhGetRoomById(int $room_id): ?array {
+    global $conn;
+    if (!$conn || $room_id <= 0) return null;
+    $stmt = mysqli_prepare($conn, "SELECT * FROM rooms WHERE room_id = ? LIMIT 1");
+    if (!$stmt) return null;
+    mysqli_stmt_bind_param($stmt, 'i', $room_id);
+    mysqli_stmt_execute($stmt);
+    $res = mysqli_stmt_get_result($stmt);
+    $row = mysqli_fetch_assoc($res);
+    mysqli_stmt_close($stmt);
+    return $row ?: null;
+}
+
+// ── Room stats for a hotel ─────────────────────────────────────────────────
+function bhRoomStats(int $hotel_id): array {
+    global $conn;
+    $stats = ['total' => 0, 'available' => 0, 'occupied' => 0, 'maintenance' => 0];
+    if (!$conn || $hotel_id <= 0) return $stats;
+    $stmt = mysqli_prepare($conn,
+        "SELECT COUNT(*) AS total,
+                SUM(status='Available') AS available,
+                SUM(status='Occupied')  AS occupied,
+                SUM(status='Maintenance') AS maintenance
+         FROM rooms WHERE hotel_id = ?"
+    );
+    if (!$stmt) return $stats;
+    mysqli_stmt_bind_param($stmt, 'i', $hotel_id);
+    mysqli_stmt_execute($stmt);
+    $res = mysqli_stmt_get_result($stmt);
+    $row = mysqli_fetch_assoc($res);
+    mysqli_stmt_close($stmt);
+    if ($row) {
+        $stats['total']       = (int)($row['total']       ?? 0);
+        $stats['available']   = (int)($row['available']   ?? 0);
+        $stats['occupied']    = (int)($row['occupied']    ?? 0);
+        $stats['maintenance'] = (int)($row['maintenance'] ?? 0);
+    }
+    return $stats;
+}
+
+// ── Review helpers ──────────────────────────────────────────────────
+function bhGetReviewsByHotel(int $hotel_id, int $page = 0, int $per_page = 10): array {
+    global $conn;
+    $offset = $page * $per_page;
+    $stmt = mysqli_prepare($conn, "SELECT r.*, u.first_name, u.last_name FROM reviews r LEFT JOIN users u ON r.user_id = u.id WHERE r.hotel_id = ? AND r.status = 'approved' ORDER BY r.created_at DESC LIMIT ? OFFSET ?");
+    mysqli_stmt_bind_param($stmt, 'iii', $hotel_id, $per_page, $offset);
+    mysqli_stmt_execute($stmt);
+    $res = mysqli_stmt_get_result($stmt);
+    $reviews = [];
+    while ($row = mysqli_fetch_assoc($res)) $reviews[] = $row;
+    mysqli_stmt_close($stmt);
+    return $reviews;
+}
+
+function bhGetReviewCount(int $hotel_id): int {
+    global $conn;
+    $stmt = mysqli_prepare($conn, "SELECT COUNT(*) AS c FROM reviews r WHERE r.hotel_id = ? AND r.status = 'approved'");
+    mysqli_stmt_bind_param($stmt, 'i', $hotel_id);
+    mysqli_stmt_execute($stmt);
+    $res = mysqli_stmt_get_result($stmt);
+    $row = mysqli_fetch_assoc($res);
+    mysqli_stmt_close($stmt);
+    return (int)($row['c'] ?? 0);
+}
+
+function bhGetAverageRating(int $hotel_id): float {
+    global $conn;
+    $stmt = mysqli_prepare($conn, "SELECT AVG(rating) AS avg_rating FROM reviews r WHERE r.hotel_id = ? AND r.status = 'approved'");
+    mysqli_stmt_bind_param($stmt, 'i', $hotel_id);
+    mysqli_stmt_execute($stmt);
+    $res = mysqli_stmt_get_result($stmt);
+    $row = mysqli_fetch_assoc($res);
+    mysqli_stmt_close($stmt);
+    return round((float)($row['avg_rating'] ?? 0), 1);
+}
+
+function bhSubmitReview(array $data): int|false {
+    global $conn;
+    $stmt = mysqli_prepare($conn, "INSERT INTO reviews (hotel_id, booking_id, user_id, guest_name, rating, comment, review) VALUES (?,?,?,?,?,?,?)");
+    $review_comment = $data['comment'] ?? $data['review'] ?? '';
+    mysqli_stmt_bind_param($stmt,'isisiss',
+        $data['hotel_id'], $data['booking_id'], $data['user_id'],
+        $data['guest_name'], $data['rating'], $review_comment, $review_comment
+    );
+    if (mysqli_stmt_execute($stmt)) {
+        $id = mysqli_insert_id($conn);
+        mysqli_stmt_close($stmt);
+        bhRecalculateHotelRating($data['hotel_id']);
+        return $id;
+    }
+    mysqli_stmt_close($stmt);
+    return false;
+}
+
+function bhGetPendingReviewsForHotel(int $hotel_id): array {
+    global $conn;
+    $stmt = mysqli_prepare($conn, "SELECT r.*, u.first_name, u.last_name, u.email FROM reviews r LEFT JOIN users u ON r.user_id = u.id WHERE r.hotel_id = ? AND r.status = 'pending' ORDER BY r.created_at ASC");
+    mysqli_stmt_bind_param($stmt, 'i', $hotel_id);
+    mysqli_stmt_execute($stmt);
+    $res = mysqli_stmt_get_result($stmt);
+    $reviews = [];
+    while ($row = mysqli_fetch_assoc($res)) $reviews[] = $row;
+    mysqli_stmt_close($stmt);
+    return $reviews;
+}
+
+function bhReplyToReview(int $review_id, string $reply_text, int $hotel_id): bool {
+    global $conn;
+    $stmt = mysqli_prepare($conn, "UPDATE reviews SET manager_reply = ? WHERE review_id = ? AND hotel_id = ? AND status != 'hidden'");
+    mysqli_stmt_bind_param($stmt, 'sii', $reply_text, $review_id, $hotel_id);
+    $ok = mysqli_stmt_execute($stmt);
+    mysqli_stmt_close($stmt);
+    return $ok;
+}
+
+function bhRecalculateHotelRating(int $hotel_id): void {
+    global $conn;
+    $avg = bhGetAverageRating($hotel_id);
+    $stmt = mysqli_prepare($conn, "UPDATE hotels SET rating = ? WHERE hotel_id = ?");
+    mysqli_stmt_bind_param($stmt, 'di', $avg, $hotel_id);
+    mysqli_stmt_execute($stmt);
+    mysqli_stmt_close($stmt);
 }
 
 // Seed on include

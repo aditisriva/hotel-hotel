@@ -9,9 +9,9 @@ include 'partials/header.php';
     <div class="ds-card">
       <div class="ds-ch"><div class="ds-ct"><i class="bi bi-person-circle"></i> Profile Details</div></div>
       <div class="ds-cb">
-        <div class="mb-3"><label class="ds-lbl">Full Name</label><input class="ds-inp" value="Aditi Sharma" /></div>
-        <div class="mb-3"><label class="ds-lbl">Email Address</label><input class="ds-inp" value="aditi@bookhotel.com" /></div>
-        <div class="mb-3"><label class="ds-lbl">Phone Number</label><input class="ds-inp" value="+91 98765 43210" /></div>
+        <div class="mb-3"><label class="ds-lbl">Full Name</label><input class="ds-inp" value="<?= htmlspecialchars($adminName) ?>" /></div>
+        <div class="mb-3"><label class="ds-lbl">Email Address</label><input class="ds-inp" value="<?= htmlspecialchars($admin['email']) ?>" /></div>
+        <div class="mb-3"><label class="ds-lbl">Phone Number</label><input class="ds-inp" value="<?= htmlspecialchars($admin['mobile']) ?>" /></div>
         <button class="ds-btn prim"><i class="bi bi-floppy-fill"></i> Save Profile</button>
       </div>
     </div>

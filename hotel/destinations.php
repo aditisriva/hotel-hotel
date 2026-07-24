@@ -3,6 +3,16 @@ session_start();
 $current_year = date("Y");
 $is_logged_in   = isset($_SESSION['hm_id']);
 $user_firstname = $is_logged_in ? htmlspecialchars($_SESSION['hm_firstname'] ?? $_SESSION['hm_name'] ?? 'Manager') : '';
+
+require_once '../db.php';
+$all_cities = [];
+$ac_res = mysqli_query($conn, "SELECT c.id, c.city_name, c.state, c.country, c.city_image, c.is_popular, COUNT(h.hotel_id) AS hotel_count, MIN(h.price_per_night) AS min_price FROM cities c LEFT JOIN hotels h ON h.city_id = c.id AND h.availability_status='active' AND h.approval_status='approved' WHERE c.status='active' GROUP BY c.id ORDER BY c.is_popular DESC, c.city_name ASC");
+if ($ac_res) while ($row = mysqli_fetch_assoc($ac_res)) $all_cities[] = $row;
+
+$dest_total_hotels = (int)mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS c FROM hotels WHERE availability_status='active' AND approval_status='approved'"))['c'];
+$dest_total_cities = count($all_cities);
+$dest_avg_rating = number_format((float)mysqli_fetch_assoc(mysqli_query($conn, "SELECT COALESCE(AVG(rating),0) AS r FROM hotels WHERE availability_status='active' AND approval_status='approved'"))['r'], 1);
+$dest_min_price = (int)mysqli_fetch_assoc(mysqli_query($conn, "SELECT COALESCE(MIN(price_per_night),999) AS p FROM hotels WHERE availability_status='active' AND approval_status='approved'"))['p'];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -87,15 +97,23 @@ $user_firstname = $is_logged_in ? htmlspecialchars($_SESSION['hm_firstname'] ?? 
     <div class="bg-white p-2 rounded-pill shadow-sm d-inline-block w-100" style="max-width: 600px;">
       <form action="hotels.php" method="GET" class="d-flex align-items-center">
         <i class="bi bi-search text-muted ms-3 me-2"></i>
-        <input type="text" name="city" class="form-control border-0 shadow-none bg-transparent ps-1" placeholder="Where do you want to go? (e.g. Mumbai, Goa)">
+        <select name="city_id" class="form-select border-0 shadow-none bg-transparent ps-1" style="width:auto; min-width:180px">
+          <option value="">All Cities</option>
+          <?php foreach ($all_cities as $c): ?>
+          <option value="<?= (int)$c['id'] ?>"><?= htmlspecialchars(ucfirst($c['city_name'])) ?></option>
+          <?php endforeach; ?>
+        </select>
         <button type="submit" class="btn btn-primary px-4 fw-600 rounded-pill">Search</button>
       </form>
     </div>
     <div class="mt-3">
       <span class="text-white-50 small me-2">Popular searches:</span>
-      <a href="hotels.php?city=goa" class="badge bg-light text-dark text-decoration-none rounded-pill py-2 px-3 fw-500 opacity-75">Goa</a>
-      <a href="hotels.php?city=mumbai" class="badge bg-light text-dark text-decoration-none rounded-pill py-2 px-3 fw-500 opacity-75">Mumbai</a>
-      <a href="hotels.php?city=kerala" class="badge bg-light text-dark text-decoration-none rounded-pill py-2 px-3 fw-500 opacity-75">Kerala</a>
+      <?php 
+        $pop_searches = array_slice($all_cities, 0, 3);
+        foreach ($pop_searches as $ps):
+      ?>
+        <a href="hotels.php?city_id=<?= (int)$ps['id'] ?>" class="badge bg-light text-dark text-decoration-none rounded-pill py-2 px-3 fw-500 opacity-75"><?= htmlspecialchars(ucfirst($ps['city_name'])) ?></a>
+      <?php endforeach; ?>
     </div>
   </div>
 </section>
@@ -108,182 +126,44 @@ $user_firstname = $is_logged_in ? htmlspecialchars($_SESSION['hm_firstname'] ?? 
       <p class="text-muted">Handpicked cities loved by travelers. Best price guaranteed.</p>
     </div>
     <div class="row g-4">
-      
-      <!-- Mumbai -->
-      <div class="col-12 col-md-6 col-lg-4">
-        <div class="dest-listing-card bg-white h-100 d-flex flex-column">
-          <div class="dest-img-wrapper">
-            <img src="https://images.unsplash.com/photo-1570168007204-dfb528c6958f?w=600&q=80" alt="Mumbai">
-            <span class="badge bg-primary position-absolute top-0 start-0 m-3 fs-6">342 Hotels</span>
-          </div>
-          <div class="p-4 d-flex flex-column flex-grow-1">
-            <h4 class="fw-700 mb-1">Mumbai</h4>
-            <p class="text-muted small mb-3"><i class="bi bi-geo-alt-fill text-danger me-1"></i> Maharashtra, India</p>
-            <div class="d-flex justify-content-between align-items-center mb-3 mt-auto border-top pt-3">
-              <div>
-                <p class="text-muted small mb-0">Starting from</p>
-                <div class="fw-800 text-primary fs-5">₹2,499<span class="fs-6 fw-400 text-muted">/night</span></div>
-              </div>
-              <div class="text-end">
-                <p class="text-muted small mb-0">Avg. Price</p>
-                <div class="fw-600 text-dark">₹4,500</div>
-              </div>
+      <?php if (empty($all_cities)): ?>
+        <div class="col-12 text-center py-5 text-muted">
+          <i class="bi bi-geo-alt" style="font-size:3rem;opacity:.3"></i>
+          <div class="fw-bold mt-3">No destinations available yet</div>
+        </div>
+      <?php else: ?>
+        <?php foreach ($all_cities as $c): 
+          $img = !empty($c['city_image']) ? htmlspecialchars($c['city_image']) : 'https://images.unsplash.com/photo-1477959858617-3f65e62c5714?w=600&q=80';
+          $name = htmlspecialchars(ucfirst($c['city_name']));
+          $state_country = htmlspecialchars(($c['state'] ?? '') . ($c['state'] && $c['country'] ? ', ' : '') . ($c['country'] ?? 'India'));
+          $count = (int)$c['hotel_count'];
+          $min_price = isset($c['min_price']) && $c['min_price'] > 0 ? '₹' . number_format($c['min_price'], 0) . '/night' : '—';
+        ?>
+        <div class="col-12 col-md-6 col-lg-4">
+          <div class="dest-listing-card bg-white h-100 d-flex flex-column">
+            <div class="dest-img-wrapper">
+              <img src="<?= $img ?>" alt="<?= $name ?>" onerror="this.src='https://images.unsplash.com/photo-1477959858617-3f65e62c5714?w=600&q=80'">
+              <span class="badge bg-primary position-absolute top-0 start-0 m-3 fs-6"><?= $count ?> Hotels</span>
             </div>
-            <a href="hotels.php?city=mumbai" class="btn btn-outline-primary w-100 fw-600">View Hotels</a>
+            <div class="p-4 d-flex flex-column flex-grow-1">
+              <h4 class="fw-700 mb-1"><?= $name ?></h4>
+              <p class="text-muted small mb-3"><i class="bi bi-geo-alt-fill text-danger me-1"></i> <?= $state_country ?></p>
+              <div class="d-flex justify-content-between align-items-center mb-3 mt-auto border-top pt-3">
+                <div>
+                  <p class="text-muted small mb-0">Starting from</p>
+                  <div class="fw-800 text-primary fs-5"><?= $min_price ?></div>
+                </div>
+                <div class="text-end">
+                  <p class="text-muted small mb-0">Hotels</p>
+                  <div class="fw-600 text-dark"><?= $count ?></div>
+                </div>
+              </div>
+              <a href="hotels.php?city_id=<?= (int)$c['id'] ?>" class="btn btn-outline-primary w-100 fw-600">View Hotels</a>
+            </div>
           </div>
         </div>
-      </div>
-
-      <!-- Goa -->
-      <div class="col-12 col-md-6 col-lg-4">
-        <div class="dest-listing-card bg-white h-100 d-flex flex-column">
-          <div class="dest-img-wrapper">
-            <img src="https://images.unsplash.com/photo-1614082242765-7c98ca0f3df3?w=600&q=80" alt="Goa">
-            <span class="badge bg-primary position-absolute top-0 start-0 m-3 fs-6">218 Hotels</span>
-          </div>
-          <div class="p-4 d-flex flex-column flex-grow-1">
-            <h4 class="fw-700 mb-1">Goa</h4>
-            <p class="text-muted small mb-3"><i class="bi bi-geo-alt-fill text-danger me-1"></i> Goa, India</p>
-            <div class="d-flex justify-content-between align-items-center mb-3 mt-auto border-top pt-3">
-              <div>
-                <p class="text-muted small mb-0">Starting from</p>
-                <div class="fw-800 text-primary fs-5">₹1,999<span class="fs-6 fw-400 text-muted">/night</span></div>
-              </div>
-              <div class="text-end">
-                <p class="text-muted small mb-0">Avg. Price</p>
-                <div class="fw-600 text-dark">₹3,800</div>
-              </div>
-            </div>
-            <a href="hotels.php?city=goa" class="btn btn-outline-primary w-100 fw-600">View Hotels</a>
-          </div>
-        </div>
-      </div>
-
-      <!-- Delhi -->
-      <div class="col-12 col-md-6 col-lg-4">
-        <div class="dest-listing-card bg-white h-100 d-flex flex-column">
-          <div class="dest-img-wrapper">
-            <img src="https://images.unsplash.com/photo-1587474260584-136574528ed5?w=600&q=80" alt="Delhi">
-            <span class="badge bg-primary position-absolute top-0 start-0 m-3 fs-6">415 Hotels</span>
-          </div>
-          <div class="p-4 d-flex flex-column flex-grow-1">
-            <h4 class="fw-700 mb-1">Delhi</h4>
-            <p class="text-muted small mb-3"><i class="bi bi-geo-alt-fill text-danger me-1"></i> Delhi, India</p>
-            <div class="d-flex justify-content-between align-items-center mb-3 mt-auto border-top pt-3">
-              <div>
-                <p class="text-muted small mb-0">Starting from</p>
-                <div class="fw-800 text-primary fs-5">₹1,499<span class="fs-6 fw-400 text-muted">/night</span></div>
-              </div>
-              <div class="text-end">
-                <p class="text-muted small mb-0">Avg. Price</p>
-                <div class="fw-600 text-dark">₹2,900</div>
-              </div>
-            </div>
-            <a href="hotels.php?city=delhi" class="btn btn-outline-primary w-100 fw-600">View Hotels</a>
-          </div>
-        </div>
-      </div>
-
-      <!-- Jaipur -->
-      <div class="col-12 col-md-6 col-lg-4">
-        <div class="dest-listing-card bg-white h-100 d-flex flex-column">
-          <div class="dest-img-wrapper">
-            <img src="https://images.unsplash.com/photo-1477587458883-47145ed94245?w=600&q=80" alt="Jaipur">
-            <span class="badge bg-primary position-absolute top-0 start-0 m-3 fs-6">187 Hotels</span>
-          </div>
-          <div class="p-4 d-flex flex-column flex-grow-1">
-            <h4 class="fw-700 mb-1">Jaipur</h4>
-            <p class="text-muted small mb-3"><i class="bi bi-geo-alt-fill text-danger me-1"></i> Rajasthan, India</p>
-            <div class="d-flex justify-content-between align-items-center mb-3 mt-auto border-top pt-3">
-              <div>
-                <p class="text-muted small mb-0">Starting from</p>
-                <div class="fw-800 text-primary fs-5">₹1,899<span class="fs-6 fw-400 text-muted">/night</span></div>
-              </div>
-              <div class="text-end">
-                <p class="text-muted small mb-0">Avg. Price</p>
-                <div class="fw-600 text-dark">₹3,200</div>
-              </div>
-            </div>
-            <a href="hotels.php?city=jaipur" class="btn btn-outline-primary w-100 fw-600">View Hotels</a>
-          </div>
-        </div>
-      </div>
-
-      <!-- Kerala -->
-      <div class="col-12 col-md-6 col-lg-4">
-        <div class="dest-listing-card bg-white h-100 d-flex flex-column">
-          <div class="dest-img-wrapper">
-            <img src="https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?w=600&q=80" alt="Kerala">
-            <span class="badge bg-primary position-absolute top-0 start-0 m-3 fs-6">296 Hotels</span>
-          </div>
-          <div class="p-4 d-flex flex-column flex-grow-1">
-            <h4 class="fw-700 mb-1">Kerala</h4>
-            <p class="text-muted small mb-3"><i class="bi bi-geo-alt-fill text-danger me-1"></i> Kerala, India</p>
-            <div class="d-flex justify-content-between align-items-center mb-3 mt-auto border-top pt-3">
-              <div>
-                <p class="text-muted small mb-0">Starting from</p>
-                <div class="fw-800 text-primary fs-5">₹2,299<span class="fs-6 fw-400 text-muted">/night</span></div>
-              </div>
-              <div class="text-end">
-                <p class="text-muted small mb-0">Avg. Price</p>
-                <div class="fw-600 text-dark">₹4,100</div>
-              </div>
-            </div>
-            <a href="hotels.php?city=kerala" class="btn btn-outline-primary w-100 fw-600">View Hotels</a>
-          </div>
-        </div>
-      </div>
-
-      <!-- Manali -->
-      <div class="col-12 col-md-6 col-lg-4">
-        <div class="dest-listing-card bg-white h-100 d-flex flex-column">
-          <div class="dest-img-wrapper">
-            <img src="https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?w=600&q=80" alt="Manali">
-            <span class="badge bg-primary position-absolute top-0 start-0 m-3 fs-6">143 Hotels</span>
-          </div>
-          <div class="p-4 d-flex flex-column flex-grow-1">
-            <h4 class="fw-700 mb-1">Manali</h4>
-            <p class="text-muted small mb-3"><i class="bi bi-geo-alt-fill text-danger me-1"></i> Himachal Pradesh</p>
-            <div class="d-flex justify-content-between align-items-center mb-3 mt-auto border-top pt-3">
-              <div>
-                <p class="text-muted small mb-0">Starting from</p>
-                <div class="fw-800 text-primary fs-5">₹1,699<span class="fs-6 fw-400 text-muted">/night</span></div>
-              </div>
-              <div class="text-end">
-                <p class="text-muted small mb-0">Avg. Price</p>
-                <div class="fw-600 text-dark">₹2,800</div>
-              </div>
-            </div>
-            <a href="hotels.php?city=manali" class="btn btn-outline-primary w-100 fw-600">View Hotels</a>
-          </div>
-        </div>
-      </div>
-
-      <!-- Udaipur -->
-      <div class="col-12 col-md-6 col-lg-4 mx-auto">
-        <div class="dest-listing-card bg-white h-100 d-flex flex-column">
-          <div class="dest-img-wrapper">
-            <img src="https://images.unsplash.com/photo-1524492412937-b28074a5d7da?w=600&q=80" alt="Udaipur">
-            <span class="badge bg-primary position-absolute top-0 start-0 m-3 fs-6">112 Hotels</span>
-          </div>
-          <div class="p-4 d-flex flex-column flex-grow-1">
-            <h4 class="fw-700 mb-1">Udaipur</h4>
-            <p class="text-muted small mb-3"><i class="bi bi-geo-alt-fill text-danger me-1"></i> Rajasthan, India</p>
-            <div class="d-flex justify-content-between align-items-center mb-3 mt-auto border-top pt-3">
-              <div>
-                <p class="text-muted small mb-0">Starting from</p>
-                <div class="fw-800 text-primary fs-5">₹2,099<span class="fs-6 fw-400 text-muted">/night</span></div>
-              </div>
-              <div class="text-end">
-                <p class="text-muted small mb-0">Avg. Price</p>
-                <div class="fw-600 text-dark">₹4,000</div>
-              </div>
-            </div>
-            <a href="hotels.php?city=udaipur" class="btn btn-outline-primary w-100 fw-600">View Hotels</a>
-          </div>
-        </div>
-      </div>
-
+        <?php endforeach; ?>
+      <?php endif; ?>
     </div>
   </div>
 </section>
@@ -295,30 +175,30 @@ $user_firstname = $is_logged_in ? htmlspecialchars($_SESSION['hm_firstname'] ?? 
       <!-- Trending Destinations -->
       <div class="col-lg-6">
         <h3 class="fw-800 mb-4">Trending This Month</h3>
-        <a href="hotels.php?city=goa" class="trending-card">
-          <img src="https://images.unsplash.com/photo-1614082242765-7c98ca0f3df3?w=200&q=80" alt="Goa" class="trending-img">
+        <?php 
+          $trending = array_slice($all_cities, 0, 3);
+          $trending_descs = [
+            'goa' => 'Beach escapes & vibrant nightlife',
+            'manali' => 'Snowy peaks & adventure sports',
+            'jaipur' => 'Royal heritage & cultural experiences',
+            'mumbai' => 'City of dreams & culinary delights',
+            'delhi' => 'Historic landmarks & bustling markets',
+            'kerala' => 'Backwaters & serene beaches',
+            'udaipur' => 'Royal palaces & lakeside romance',
+          ];
+          foreach ($trending as $t):
+            $slug = strtolower($t['city_name']);
+            $desc = $trending_descs[$slug] ?? 'Popular destination';
+        ?>
+        <a href="hotels.php?city_id=<?= (int)$t['id'] ?>" class="trending-card">
+          <img src="<?= !empty($t['city_image']) ? htmlspecialchars($t['city_image']) : 'https://images.unsplash.com/photo-1477959858617-3f65e62c5714?w=200&q=80' ?>" alt="<?= htmlspecialchars(ucfirst($t['city_name'])) ?>" class="trending-img" onerror="this.src='https://images.unsplash.com/photo-1477959858617-3f65e62c5714?w=200&q=80'">
           <div>
-            <h5 class="fw-700 mb-1 text-dark">Goa</h5>
-            <p class="text-muted small mb-0">Beach escapes & vibrant nightlife</p>
+            <h5 class="fw-700 mb-1 text-dark"><?= htmlspecialchars(ucfirst($t['city_name'])) ?></h5>
+            <p class="text-muted small mb-0"><?= $desc ?></p>
           </div>
           <div class="ms-auto pe-3 text-primary"><i class="bi bi-arrow-right-circle fs-3"></i></div>
         </a>
-        <a href="hotels.php?city=jaipur" class="trending-card">
-          <img src="https://images.unsplash.com/photo-1477587458883-47145ed94245?w=200&q=80" alt="Jaipur" class="trending-img">
-          <div>
-            <h5 class="fw-700 mb-1 text-dark">Jaipur</h5>
-            <p class="text-muted small mb-0">Royal heritage & cultural experiences</p>
-          </div>
-          <div class="ms-auto pe-3 text-primary"><i class="bi bi-arrow-right-circle fs-3"></i></div>
-        </a>
-        <a href="hotels.php?city=manali" class="trending-card">
-          <img src="https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?w=200&q=80" alt="Manali" class="trending-img">
-          <div>
-            <h5 class="fw-700 mb-1 text-dark">Manali</h5>
-            <p class="text-muted small mb-0">Snowy peaks & adventure sports</p>
-          </div>
-          <div class="ms-auto pe-3 text-primary"><i class="bi bi-arrow-right-circle fs-3"></i></div>
-        </a>
+        <?php endforeach; ?>
       </div>
 
       <!-- Why Visit Section -->
@@ -369,28 +249,28 @@ $user_firstname = $is_logged_in ? htmlspecialchars($_SESSION['hm_firstname'] ?? 
       <div class="col-6 col-md-3">
         <div class="stat-card">
           <div class="stat-icon"><i class="bi bi-buildings"></i></div>
-          <h3 class="fw-800 text-dark mb-1">10,000+</h3>
+          <h3 class="fw-800 text-dark mb-1"><?= number_format($dest_total_hotels) ?>+</h3>
           <p class="text-muted small fw-600 mb-0">Total Hotels</p>
         </div>
       </div>
       <div class="col-6 col-md-3">
         <div class="stat-card">
           <div class="stat-icon"><i class="bi bi-geo-alt"></i></div>
-          <h3 class="fw-800 text-dark mb-1">500+</h3>
-          <p class="text-muted small fw-600 mb-0">Popular Attractions</p>
+          <h3 class="fw-800 text-dark mb-1"><?= $dest_total_cities ?>+</h3>
+          <p class="text-muted small fw-600 mb-0">Destinations</p>
         </div>
       </div>
       <div class="col-6 col-md-3">
         <div class="stat-card">
           <div class="stat-icon"><i class="bi bi-star"></i></div>
-          <h3 class="fw-800 text-dark mb-1">4.8/5</h3>
+          <h3 class="fw-800 text-dark mb-1"><?= $dest_avg_rating ?>/5</h3>
           <p class="text-muted small fw-600 mb-0">Average Rating</p>
         </div>
       </div>
       <div class="col-6 col-md-3">
         <div class="stat-card">
           <div class="stat-icon"><i class="bi bi-tag"></i></div>
-          <h3 class="fw-800 text-dark mb-1">₹999</h3>
+          <h3 class="fw-800 text-dark mb-1">₹<?= number_format($dest_min_price) ?></h3>
           <p class="text-muted small fw-600 mb-0">Starting Price</p>
         </div>
       </div>

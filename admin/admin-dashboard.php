@@ -8,7 +8,7 @@ include 'partials/header.php';
   <div class="d-flex flex-column flex-lg-row justify-content-between gap-4">
     <div>
       <span class="hero-pill"><i class="bi bi-shield-check"></i> Platform Administration Console</span>
-      <h1 class="hero-title">Welcome back, Aditi. BookHotel is scaling smoothly across every market.</h1>
+      <h1 class="hero-title">Welcome back, <?= htmlspecialchars($admin['first_name']) ?>. BookHotel is scaling smoothly across every market.</h1>
       <p class="hero-sub">Oversee users, hotel managers, property listings, bookings, and business health from one central command center.</p>
       <div class="d-flex flex-wrap gap-2 mt-3">
         <a href="bookings.php" class="ds-btn prim"><i class="bi bi-check2-circle"></i> Review Pending Approvals</a>

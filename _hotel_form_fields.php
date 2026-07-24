@@ -6,6 +6,12 @@ $v = function($field, $default='') use ($eh) {
 };
 $amenity_list = ['wifi','pool','breakfast','parking','ac','gym','spa','bar','restaurant','fireplace'];
 $cur_amenities = $eh ? array_map('trim', explode(',', $eh['amenities'] ?? '')) : [];
+
+$cities_list = [];
+if (isset($conn)) {
+    $cr = mysqli_query($conn, "SELECT id, city_name, state FROM cities WHERE status='active' ORDER BY city_name ASC");
+    if ($cr) while ($row = mysqli_fetch_assoc($cr)) $cities_list[] = $row;
+}
 ?>
 <div class="row g-3">
   <div class="col-md-8">
@@ -22,7 +28,15 @@ $cur_amenities = $eh ? array_map('trim', explode(',', $eh['amenities'] ?? '')) :
   </div>
   <div class="col-md-6">
     <label class="ds-lbl">City <span class="text-danger">*</span></label>
-    <input class="ds-inp" name="city" required value="<?php echo $v('city'); ?>" placeholder="e.g. mumbai"/>
+    <select class="ds-inp ds-sel" name="city_id" required onchange="this.form.querySelector('[name=city]').value=this.options[this.selectedIndex].textContent">
+      <option value="">Select City</option>
+      <?php foreach($cities_list as $c): ?>
+      <option value="<?php echo $c['id']; ?>" <?php echo ($eh && (int)$eh['city_id']===(int)$c['id']) ? 'selected' : ''; ?>>
+        <?php echo htmlspecialchars($c['city_name'] . ($c['state'] ? ', ' . $c['state'] : '')); ?>
+      </option>
+      <?php endforeach; ?>
+    </select>
+    <input type="hidden" name="city" value="<?php echo $v('city'); ?>"/>
   </div>
   <div class="col-md-6">
     <label class="ds-lbl">State</label>

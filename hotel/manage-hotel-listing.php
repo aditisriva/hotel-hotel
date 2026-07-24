@@ -8,9 +8,20 @@ $user_id = $_SESSION['hm_id'] ?? 0;
 $msg = '';
 $msg_type = 'success';
 
+$manager = getCurrentHotelManager();
+$manager_name = $manager ? ($manager['first_name'] . ' ' . $manager['last_name']) : 'Hotel Manager';
+$manager_initials = $manager ? strtoupper(substr($manager['first_name'], 0, 1) . substr($manager['last_name'], 0, 1)) : 'M';
+$manager_firstname = $manager ? $manager['first_name'] : '';
+$manager_role = $manager ? ucwords(str_replace('_', ' ', $manager['role'])) : 'Hotel Manager';
+
 // Fetch assigned hotel for this manager
 $hotels = bhGetHotels('', 0, 0, 0, $user_id);
 $hotel = $hotels[0] ?? null;
+
+// Fetch active cities for dropdown
+$cities_list = [];
+$cr = mysqli_query($conn, "SELECT id, city_name, state FROM cities WHERE status='active' ORDER BY city_name ASC");
+if ($cr) while ($row = mysqli_fetch_assoc($cr)) $cities_list[] = $row;
 
 if (!$hotel) {
     $msg = 'No hotel assigned to you yet. Please contact the Main Admin.';
@@ -104,10 +115,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $hotel) {
     <script>document.addEventListener("DOMContentLoaded",()=>{let c=location.pathname.split("/").pop()||"admin-dashboard.php";document.querySelectorAll("#mainSidebar a").forEach(l=>{l.getAttribute("href")===c?l.classList.add("active"):l.classList.remove("active")})});</script>
     <div class="ds-foot">
       <a href="#" class="ds-hpill">
-        <img src="https://images.unsplash.com/photo-1566073771259-6a8506099945?w=120&q=80" alt="Hotel" />
+        <div class="ds-av" style="width:36px;height:36px;border-radius:8px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#0f172a;font-size:.85rem;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;"><?= $manager_initials ?></div>
         <div>
-          <div class="ds-hpill-name">Hotel Manager</div>
-          <div class="ds-hpill-status">● Active</div>
+          <div class="ds-hpill-name"><?= htmlspecialchars($manager_name) ?></div>
+          <div class="ds-hpill-status">● <?= htmlspecialchars($manager_role) ?></div>
         </div>
       </a>
     </div>
@@ -123,8 +134,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $hotel) {
     </div>
     <div class="ds-top-r">
       <div class="ds-avbtn" id="dsAvBtn">
-        <div class="ds-av">M</div>
-        <span class="ds-avname d-none d-sm-block">Manager</span>
+        <div class="ds-av"><?= $manager_initials ?></div>
+        <span class="ds-avname d-none d-sm-block"><?= htmlspecialchars($manager_firstname ?: $manager_name) ?></span>
       </div>
     </div>
   </header>
@@ -165,7 +176,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $hotel) {
                 </div>
                 <div class="col-md-6">
                   <label class="form-label fw-600 small">City</label>
-                  <input type="text" class="ds-inp" name="city" value="<?php echo htmlspecialchars(ucfirst($hotel['city'])); ?>" />
+                  <select class="ds-inp ds-sel" name="city" required>
+                    <option value="">Select City</option>
+                    <?php foreach ($cities_list as $c): ?>
+                      <option value="<?php echo htmlspecialchars(strtolower($c['city_name'])); ?>" <?php echo (strtolower($hotel['city'] ?? '') === strtolower($c['city_name'])) ? 'selected' : ''; ?>>
+                        <?php echo htmlspecialchars($c['city_name'] . ($c['state'] ? ', ' . $c['state'] : '')); ?>
+                      </option>
+                    <?php endforeach; ?>
+                  </select>
                 </div>
                 <div class="col-md-6">
                   <label class="form-label fw-600 small">State</label>

@@ -9,8 +9,8 @@ include 'partials/header.php';
     <div class="ds-card">
       <div class="ds-ch"><div class="ds-ct"><i class="bi bi-sliders"></i> Website Configuration</div></div>
       <div class="ds-cb">
-        <div class="mb-3"><label class="ds-lbl">Platform Name</label><input class="ds-inp" value="BookHotel" /></div>
-        <div class="mb-3"><label class="ds-lbl">Support Email</label><input class="ds-inp" value="support@bookhotel.com" /></div>
+        <div class="mb-3"><label class="ds-lbl">Platform Name</label><input class="ds-inp" value="<?= htmlspecialchars($adminName) ?>" /></div>
+        <div class="mb-3"><label class="ds-lbl">Support Email</label><input class="ds-inp" value="<?= htmlspecialchars($admin['email']) ?>" /></div>
         <div class="mb-3"><label class="ds-lbl">Default Currency</label><input class="ds-inp" value="INR" /></div>
         <button class="ds-btn prim"><i class="bi bi-floppy-fill"></i> Save Configuration</button>
       </div>

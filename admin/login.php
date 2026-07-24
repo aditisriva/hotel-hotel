@@ -44,10 +44,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($admin['status'] !== 'active') {
                 $error = 'Your account has been suspended. Please contact support.';
             } elseif (password_verify($password, $admin['password'])) {
-                $_SESSION['admin_id']        = $admin['admin_id'];
-                $_SESSION['admin_name']      = $admin['first_name'] . ' ' . $admin['last_name'];
-                $_SESSION['admin_email']     = $admin['email'];
-                $_SESSION['admin_firstname'] = $admin['first_name'];
+                 $_SESSION['admin_id']        = $admin['admin_id'];
+                 $_SESSION['admin_name']      = $admin['first_name'] . ' ' . $admin['last_name'];
+                 $_SESSION['admin_email']     = $admin['email'];
+                 $_SESSION['admin_firstname'] = $admin['first_name'];
+                 $_SESSION['admin_role']      = $admin['role'];
 
                 $aid = (int)$admin['admin_id'];
                 mysqli_query($conn, "UPDATE admins SET last_login = NOW() WHERE admin_id = $aid");

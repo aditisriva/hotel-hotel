@@ -1,6 +1,6 @@
 <?php
 require_once 'auth_guard.php';
-require_once '../hotel/db.php';
+require_once 'db.php';
 require_once '../hotel/hotel_functions.php';
 
 // ── AJAX Handlers ───────────────────────────────────────────────────────────

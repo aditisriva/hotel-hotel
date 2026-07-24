@@ -26,6 +26,7 @@ function ensure_hotel_tables() {
     $sql = "CREATE TABLE IF NOT EXISTS `hotels` (
       `hotel_id`            INT(11) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
       `hotel_name`          VARCHAR(255) NOT NULL,
+      `city_id`             INT(11) UNSIGNED DEFAULT NULL,
       `city`                VARCHAR(100) NOT NULL,
       `location`            VARCHAR(255) NOT NULL,
       `state`               VARCHAR(100) DEFAULT NULL,
@@ -50,6 +51,7 @@ function ensure_hotel_tables() {
       `created_at`          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       `updated_at`          TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX `idx_city`      (`city`),
+      INDEX `idx_city_id`   (`city_id`),
       INDEX `idx_status`    (`availability_status`),
       INDEX `idx_rating`    (`rating`),
       INDEX `idx_price`     (`price_per_night`),
@@ -57,20 +59,37 @@ function ensure_hotel_tables() {
       INDEX `idx_assigned`  (`assigned_to`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
     mysqli_query($conn, $sql);
+
+    $alters = [
+      'city_id' => "ALTER TABLE `hotels` ADD COLUMN `city_id` INT(11) UNSIGNED DEFAULT NULL AFTER `hotel_name`",
+      'assigned_to' => "ALTER TABLE `hotels` ADD COLUMN `assigned_to` INT(11) UNSIGNED DEFAULT NULL AFTER `email`",
+    ];
+    foreach ($alters as $col => $q) {
+      $chk = mysqli_query($conn, "SHOW COLUMNS FROM `hotels` LIKE '$col'");
+      if ($chk && mysqli_num_rows($chk) === 0) {
+        mysqli_query($conn, $q);
+      }
+    }
     
-    $sql = "CREATE TABLE IF NOT EXISTS `rooms` (
+if (!function_exists('syncRoomsTableSchema')) {
+function syncRoomsTableSchema($conn) {
+    if (!$conn) return;
+
+    $create_sql = "CREATE TABLE IF NOT EXISTS `rooms` (
       `room_id`          INT(11) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
       `hotel_id`         INT(11) UNSIGNED NOT NULL,
-      `manager_id`       INT(11) UNSIGNED NOT NULL,
-      `room_number`      VARCHAR(20) NOT NULL,
-      `room_type`        VARCHAR(100) NOT NULL,
+      `manager_id`       INT(11) UNSIGNED NOT NULL DEFAULT 1,
+      `room_number`      VARCHAR(50) NOT NULL DEFAULT '101',
+      `room_type`        VARCHAR(100) NOT NULL DEFAULT 'Standard',
       `room_name`        VARCHAR(150) DEFAULT NULL,
-      `floor`            VARCHAR(50) DEFAULT NULL,
+      `floor`            VARCHAR(50) DEFAULT '1st',
       `adult_capacity`   TINYINT(3) DEFAULT 2,
       `child_capacity`   TINYINT(3) DEFAULT 0,
-      `bed_type`         VARCHAR(100) DEFAULT NULL,
+      `capacity`         TINYINT(3) DEFAULT 2,
+      `bed_type`         VARCHAR(100) DEFAULT 'Double',
       `base_price`       DECIMAL(10,2) NOT NULL DEFAULT 0.00,
       `discount_percent` DECIMAL(5,2) DEFAULT 0.00,
+      `discount_pct`     DECIMAL(5,2) DEFAULT 0.00,
       `final_price`      DECIMAL(10,2) NOT NULL DEFAULT 0.00,
       `description`      TEXT DEFAULT NULL,
       `amenities`        TEXT DEFAULT NULL,
@@ -78,21 +97,37 @@ function ensure_hotel_tables() {
       `status`           ENUM('Available','Occupied','Maintenance') DEFAULT 'Available',
       `created_at`       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       `updated_at`       TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      INDEX `idx_hotel`  (`hotel_id`),
-      INDEX `idx_manager` (`manager_id`),
-      INDEX `idx_status` (`status`),
-      INDEX `idx_number` (`room_number`)
+      INDEX `idx_hotel`    (`hotel_id`),
+      INDEX `idx_manager`  (`manager_id`),
+      INDEX `idx_status`   (`status`),
+      INDEX `idx_number`   (`room_number`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
-    mysqli_query($conn, $sql);
-    
-    $col_check = mysqli_query($conn, "SHOW COLUMNS FROM rooms LIKE 'manager_id'");
-    if ($col_check && mysqli_num_rows($col_check) === 0) {
-        mysqli_query($conn, "ALTER TABLE `rooms` ADD COLUMN `manager_id` INT(11) UNSIGNED NOT NULL AFTER `hotel_id`");
+    mysqli_query($conn, $create_sql);
+
+    $columns = [
+        'manager_id'       => "ALTER TABLE `rooms` ADD COLUMN `manager_id` INT(11) UNSIGNED NOT NULL DEFAULT 1 AFTER `hotel_id`",
+        'room_number'      => "ALTER TABLE `rooms` ADD COLUMN `room_number` VARCHAR(50) NOT NULL DEFAULT '101' AFTER `manager_id`",
+        'room_name'        => "ALTER TABLE `rooms` ADD COLUMN `room_name` VARCHAR(150) DEFAULT NULL AFTER `room_type`",
+        'floor'            => "ALTER TABLE `rooms` ADD COLUMN `floor` VARCHAR(50) DEFAULT '1st' AFTER `room_name`",
+        'adult_capacity'   => "ALTER TABLE `rooms` ADD COLUMN `adult_capacity` TINYINT(3) DEFAULT 2 AFTER `floor`",
+        'child_capacity'   => "ALTER TABLE `rooms` ADD COLUMN `child_capacity` TINYINT(3) DEFAULT 0 AFTER `adult_capacity`",
+        'capacity'         => "ALTER TABLE `rooms` ADD COLUMN `capacity` TINYINT(3) DEFAULT 2 AFTER `child_capacity`",
+        'bed_type'         => "ALTER TABLE `rooms` ADD COLUMN `bed_type` VARCHAR(100) DEFAULT 'Double' AFTER `capacity`",
+        'discount_percent' => "ALTER TABLE `rooms` ADD COLUMN `discount_percent` DECIMAL(5,2) DEFAULT 0.00 AFTER `base_price`",
+        'discount_pct'     => "ALTER TABLE `rooms` ADD COLUMN `discount_pct` DECIMAL(5,2) DEFAULT 0.00 AFTER `discount_percent`",
+        'final_price'      => "ALTER TABLE `rooms` ADD COLUMN `final_price` DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER `discount_pct`",
+        'description'      => "ALTER TABLE `rooms` ADD COLUMN `description` TEXT DEFAULT NULL AFTER `final_price`",
+        'room_images'      => "ALTER TABLE `rooms` ADD COLUMN `room_images` TEXT DEFAULT NULL AFTER `amenities`",
+    ];
+
+    foreach ($columns as $col => $alter_query) {
+        $chk = mysqli_query($conn, "SHOW COLUMNS FROM `rooms` LIKE '$col'");
+        if ($chk && mysqli_num_rows($chk) === 0) {
+            mysqli_query($conn, $alter_query);
+        }
     }
-    $col_check = mysqli_query($conn, "SHOW COLUMNS FROM rooms LIKE 'room_name'");
-    if ($col_check && mysqli_num_rows($col_check) === 0) {
-        mysqli_query($conn, "ALTER TABLE `rooms` ADD COLUMN `room_name` VARCHAR(150) DEFAULT NULL AFTER `room_type`");
-    }
+}
+} // end if (!function_exists('syncRoomsTableSchema'))
     
     $sql = "CREATE TABLE IF NOT EXISTS `bookings` (
       `booking_id`       VARCHAR(20) PRIMARY KEY,
@@ -173,6 +208,44 @@ function ensure_hotel_tables() {
 
 ensure_hotel_tables();
 
+function ensure_cities_table() {
+    global $conn;
+    $sql = "CREATE TABLE IF NOT EXISTS `cities` (
+      `id`               INT(11) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      `city_name`        VARCHAR(100) NOT NULL,
+      `state`            VARCHAR(100) DEFAULT NULL,
+      `country`          VARCHAR(100) DEFAULT 'India',
+      `city_image`       VARCHAR(255) DEFAULT NULL,
+      `description`      TEXT DEFAULT NULL,
+      `status`           ENUM('active','inactive') DEFAULT 'active',
+      `is_popular`       TINYINT(1) DEFAULT 0,
+      `created_by`       INT(11) UNSIGNED DEFAULT NULL,
+      `created_at`       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      `updated_at`       TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY `uniq_city_name` (`city_name`),
+      INDEX `idx_status` (`status`),
+      INDEX `idx_popular` (`is_popular`),
+      INDEX `idx_country` (`country`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+    mysqli_query($conn, $sql);
+
+    $alters = [
+        'state'            => "ALTER TABLE `cities` ADD COLUMN `state` VARCHAR(100) DEFAULT NULL AFTER `city_name`",
+        'country'          => "ALTER TABLE `cities` ADD COLUMN `country` VARCHAR(100) DEFAULT 'India' AFTER `state`",
+        'city_image'       => "ALTER TABLE `cities` ADD COLUMN `city_image` VARCHAR(255) DEFAULT NULL AFTER `country`",
+        'description'      => "ALTER TABLE `cities` ADD COLUMN `description` TEXT DEFAULT NULL AFTER `city_image`",
+        'is_popular'       => "ALTER TABLE `cities` ADD COLUMN `is_popular` TINYINT(1) DEFAULT 0 AFTER `status`",
+        'created_by'       => "ALTER TABLE `cities` ADD COLUMN `created_by` INT(11) UNSIGNED DEFAULT NULL AFTER `is_popular`",
+    ];
+    foreach ($alters as $col => $q) {
+        $chk = mysqli_query($conn, "SHOW COLUMNS FROM `cities` LIKE '$col'");
+        if ($chk && mysqli_num_rows($chk) === 0) {
+            mysqli_query($conn, $q);
+        }
+    }
+}
+ensure_cities_table();
+
 function hm_sanitize($data) {
     global $conn;
     $data = trim($data);
@@ -224,5 +297,20 @@ function initializeLoginAttemptsTable() {
 }
 
 initializeLoginAttemptsTable();
+
+function getCurrentHotelManager() {
+    global $conn;
+    if (!isset($_SESSION['hm_id'])) {
+        return null;
+    }
+    $uid = (int)$_SESSION['hm_id'];
+    $stmt = mysqli_prepare($conn, "SELECT id, first_name, last_name, email, mobile, role FROM users WHERE id = ? LIMIT 1");
+    mysqli_stmt_bind_param($stmt, 'i', $uid);
+    mysqli_stmt_execute($stmt);
+    $res = mysqli_stmt_get_result($stmt);
+    $manager = mysqli_fetch_assoc($res);
+    mysqli_stmt_close($stmt);
+    return $manager ?: null;
+}
 
 ?>

@@ -14,6 +14,19 @@ if (isset($_SESSION['admin_id'])) {
     $res = mysqli_query($conn, "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id=" . (int)$_SESSION['admin_id'] . " AND is_read=0");
     if ($res) { $bellCount = (int)mysqli_fetch_assoc($res)['cnt']; }
 }
+
+$admin = getCurrentAdmin();
+if (!$admin) {
+    header('Location: login.php');
+    exit();
+}
+$adminName = $admin['first_name'] . ' ' . $admin['last_name'];
+$adminInitials = strtoupper(substr($admin['first_name'], 0, 1) . substr($admin['last_name'], 0, 1));
+$adminRole = ucwords(str_replace('_', ' ', $admin['role']));
+$adminAvatarHtml = '';
+if (!empty($admin['profile_image'])) {
+    $adminAvatarHtml = '<img src="' . htmlspecialchars($admin['profile_image']) . '" alt="Avatar" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" />';
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -57,10 +70,12 @@ if (isset($_SESSION['admin_id'])) {
     </nav>
     <div class="ds-foot">
       <a href="profile.php" class="ds-hpill">
-        <div class="ds-av" style="width:36px;height:36px;border-radius:8px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#0f172a;font-size:.85rem;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">AS</div>
+        <div class="ds-av" style="width:36px;height:36px;border-radius:8px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#0f172a;font-size:.85rem;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;">
+    <?= $adminAvatarHtml ?: $adminInitials ?>
+</div>
         <div>
-          <div class="ds-hpill-name">Aditi</div>
-          <div class="ds-hpill-status">● Admin</div>
+          <div class="ds-hpill-name"><?= htmlspecialchars($adminName) ?></div>
+          <div class="ds-hpill-status">● <?= htmlspecialchars($adminRole) ?></div>
         </div>
       </a>
     </div>
@@ -85,8 +100,8 @@ if (isset($_SESSION['admin_id'])) {
         <span id="bellCount" style="position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;font-size:.65rem;font-weight:700;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;padding:0;<?php echo $bellCount > 0 ? '' : 'display:none;'; ?>"><?php echo $bellCount > 99 ? '99+' : $bellCount; ?></span>
       </a>
       <div class="ds-avbtn" id="dsAvBtn">
-        <div class="ds-av" style="background:linear-gradient(135deg,#f59e0b,#d97706);">AS</div>
-        <span class="ds-avname d-none d-sm-block">Aditi</span>
+        <div class="ds-av" style="background:linear-gradient(135deg,#f59e0b,#d97706);overflow:hidden;"><?= $adminAvatarHtml ?: $adminInitials ?></div>
+        <span class="ds-avname d-none d-sm-block"><?= htmlspecialchars($adminName) ?></span>
         <div class="ds-dropdown" id="dsAvMenu">
           <a href="profile.php" class="ds-drop-item"><i class="bi bi-person-fill text-primary"></i> My Profile</a>
           <a href="settings.php" class="ds-drop-item"><i class="bi bi-gear-fill text-primary"></i> Settings</a>

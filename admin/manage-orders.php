@@ -1,6 +1,6 @@
 <?php
 require_once 'auth_guard.php';
-require_once '../hotel/db.php';
+require_once 'db.php';
 
 // Handle status update
 if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['action'])) {

@@ -1,6 +1,6 @@
 <?php
 require_once 'auth_guard.php';
-require_once '../hotel/db.php';
+require_once 'db.php';
 
 // ── Ensure reviews table has status + booking_id columns ────────────────────
 $add_booking = mysqli_query($conn, "SHOW COLUMNS FROM reviews LIKE 'booking_id'");

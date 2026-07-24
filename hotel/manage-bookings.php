@@ -4,6 +4,12 @@ require_once 'db.php';
 require_once 'auth_guard.php';
 require_once 'hotel_functions.php';
 
+$manager = getCurrentHotelManager();
+$manager_name = $manager ? ($manager['first_name'] . ' ' . $manager['last_name']) : 'Hotel Manager';
+$manager_initials = $manager ? strtoupper(substr($manager['first_name'], 0, 1) . substr($manager['last_name'], 0, 1)) : 'M';
+$manager_firstname = $manager ? $manager['first_name'] : '';
+$manager_role = $manager ? ucwords(str_replace('_', ' ', $manager['role'])) : 'Hotel Manager';
+
 // ── Handle status update ──────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     header('Content-Type: application/json');
@@ -111,7 +117,7 @@ if ($res) while ($row = mysqli_fetch_assoc($res)) $bookings[] = $row;
   <div class="ds-top-r">
     <a href="notifications.php" class="ds-ibtn"><i class="bi bi-bell-fill"></i></a>
     <div class="ds-avbtn" id="dsAvBtn">
-      <div class="ds-av">AD</div><span class="ds-avname d-none d-sm-block">Admin</span>
+      <div class="ds-av"><?= $manager_initials ?></div><span class="ds-avname d-none d-sm-block"><?= htmlspecialchars($manager_firstname ?: $manager_name) ?></span>
       <div class="ds-dropdown" id="dsAvMenu">
         <a href="settings.php" class="ds-drop-item"><i class="bi bi-gear-fill text-primary"></i> Settings</a>
         <hr class="my-1 mx-2"/>

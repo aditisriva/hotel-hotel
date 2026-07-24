@@ -366,6 +366,53 @@ $id_qs = 'id=' . $hotel_id . ($full_qs_str ? str_replace('?','&',$full_qs_str) :
         <div class="detail-card mb-4">
           <h5 class="fw-700 mb-4"><i class="bi bi-door-open text-primary me-2"></i>Room Types</h5>
           <div class="d-flex flex-column gap-3">
+            <?php
+            $db_rooms = [];
+            if (isset($conn) && $hotel_id > 0) {
+                $r_res = mysqli_query($conn, "SELECT * FROM rooms WHERE hotel_id = $hotel_id AND (status = 'Available' OR status = 'available') ORDER BY room_id DESC");
+                if ($r_res) {
+                    while ($r_row = mysqli_fetch_assoc($r_res)) {
+                        $db_rooms[] = $r_row;
+                    }
+                }
+            }
+            ?>
+            <?php if (!empty($db_rooms)): ?>
+              <?php foreach ($db_rooms as $r):
+                  $r_imgs = !empty($r['room_images']) ? json_decode($r['room_images'], true) : [];
+                  $r_img = (!empty($r_imgs) && is_array($r_imgs)) ? $r_imgs[0] : 'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=300&q=80';
+                  $r_price = (float)(($r['final_price'] ?? 0) > 0 ? $r['final_price'] : (($r['base_price'] ?? 0) > 0 ? $r['base_price'] : $hotel_price));
+                  $r_orig = (float)(($r['base_price'] ?? 0) > 0 ? $r['base_price'] : $hotel_orig);
+                  $r_name = !empty($r['room_type']) ? $r['room_type'] . ' (Room ' . $r['room_number'] . ')' : 'Room ' . $r['room_number'];
+              ?>
+              <div class="room-card">
+                <div class="row g-0">
+                  <div class="col-4 col-md-3">
+                    <img src="<?= htmlspecialchars($r_img) ?>" class="room-img" alt="<?= htmlspecialchars($r_name) ?>"/>
+                  </div>
+                  <div class="col-8 col-md-9">
+                    <div class="p-3 h-100 d-flex flex-column justify-content-between">
+                      <div>
+                        <h6 class="fw-700 mb-1"><?= htmlspecialchars($r_name) ?></h6>
+                        <p class="text-muted small mb-2">Floor: <?= htmlspecialchars($r['floor'] ?? '1st') ?> · <?= htmlspecialchars($r['bed_type'] ?? 'Double Bed') ?> · Status: <?= htmlspecialchars($r['status'] ?? 'Available') ?></p>
+                        <div class="d-flex flex-wrap gap-1 mb-2">
+                          <span class="amenity-tag"><i class="bi bi-wifi"></i> WiFi</span>
+                          <span class="amenity-tag"><i class="bi bi-cup-hot"></i> Breakfast</span>
+                          <span class="amenity-tag"><i class="bi bi-arrow-repeat"></i> Free Cancel</span>
+                        </div>
+                      </div>
+                      <div class="d-flex justify-content-between align-items-center mt-2">
+                        <div>
+                          <?php bhPriceBlock($r_price, $r_orig); ?>
+                        </div>
+                        <a href="review-booking.php?room=<?= urlencode($r['room_type'] ?? 'standard') ?>&id=<?= $hotel_id; ?><?= $booking_qs; ?>" class="btn btn-primary btn-sm px-4">Select</a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <?php endforeach; ?>
+            <?php else: ?>
 
             <!-- Room 1: Deluxe -->
             <div class="room-card">
@@ -377,7 +424,7 @@ $id_qs = 'id=' . $hotel_id . ($full_qs_str ? str_replace('?','&',$full_qs_str) :
                   <div class="p-3 h-100 d-flex flex-column justify-content-between">
                     <div>
                       <h6 class="fw-700 mb-1">Deluxe Heritage Room</h6>
-                      <p class="text-muted small mb-2">30 m� � King Bed � City View � Non-smoking</p>
+                      <p class="text-muted small mb-2">30 m² · King Bed · City View · Non-smoking</p>
                       <div class="d-flex flex-wrap gap-1 mb-2">
                         <span class="amenity-tag"><i class="bi bi-wifi"></i> WiFi</span>
                         <span class="amenity-tag"><i class="bi bi-cup-hot"></i> Breakfast</span>
@@ -403,7 +450,7 @@ $id_qs = 'id=' . $hotel_id . ($full_qs_str ? str_replace('?','&',$full_qs_str) :
                   <div class="p-3 h-100 d-flex flex-column justify-content-between">
                     <div>
                       <h6 class="fw-700 mb-1">Royal Suite</h6>
-                      <p class="text-muted small mb-2">65 m� � King Bed � Fort View � Balcony</p>
+                      <p class="text-muted small mb-2">65 m² · King Bed · Fort View · Balcony</p>
                       <div class="d-flex flex-wrap gap-1 mb-2">
                         <span class="amenity-tag"><i class="bi bi-wifi"></i> WiFi</span>
                         <span class="amenity-tag"><i class="bi bi-cup-hot"></i> Breakfast</span>
@@ -431,7 +478,7 @@ $id_qs = 'id=' . $hotel_id . ($full_qs_str ? str_replace('?','&',$full_qs_str) :
                   <div class="p-3 h-100 d-flex flex-column justify-content-between">
                     <div>
                       <h6 class="fw-700 mb-1">Maharaja Presidential Suite</h6>
-                      <p class="text-muted small mb-2">120 m� � Private Terrace � Panoramic View</p>
+                      <p class="text-muted small mb-2">120 m² · Private Terrace · Panoramic View</p>
                       <div class="d-flex flex-wrap gap-1 mb-2">
                         <span class="amenity-tag"><i class="bi bi-wifi"></i> WiFi</span>
                         <span class="amenity-tag"><i class="bi bi-cup-hot"></i> All Meals</span>
@@ -448,6 +495,7 @@ $id_qs = 'id=' . $hotel_id . ($full_qs_str ? str_replace('?','&',$full_qs_str) :
                 </div>
               </div>
             </div>
+            <?php endif; ?>
 
           </div>
         </div>

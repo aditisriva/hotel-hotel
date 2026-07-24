@@ -2,6 +2,13 @@
 require_once 'db.php';
 require_once 'auth_guard.php';
 require_once 'hotel_functions.php';
+
+$manager = getCurrentHotelManager();
+$manager_name = $manager ? ($manager['first_name'] . ' ' . $manager['last_name']) : 'Hotel Manager';
+$manager_initials = $manager ? strtoupper(substr($manager['first_name'], 0, 1) . substr($manager['last_name'], 0, 1)) : 'M';
+$manager_firstname = $manager ? $manager['first_name'] : '';
+$manager_role = $manager ? ucwords(str_replace('_', ' ', $manager['role'])) : 'Hotel Manager';
+
 // Assuming logged in manager manages hotel_id = 1
 $hotel_id = 1;
 
@@ -93,12 +100,10 @@ mysqli_stmt_close($ci_stmt);
     <script>document.addEventListener("DOMContentLoaded",()=>{let c=location.pathname.split("/").pop()||"admin-dashboard.php";document.querySelectorAll("#mainSidebar a").forEach(l=>{l.getAttribute("href")===c?l.classList.add("active"):l.classList.remove("active")})});</script>
     <div class="ds-foot">
       <a href="admin-hotel-profile.php" class="ds-hpill">
-        <img src="https://images.unsplash.com/photo-1566073771259-6a8506099945?w=120&q=80" alt="Hotel" />
+        <div class="ds-av" style="width:36px;height:36px;border-radius:8px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#0f172a;font-size:.85rem;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;"><?= $manager_initials ?></div>
         <div>
-          <div class="ds-hpill-name"><?php
-require_once 'auth_guard.php'; echo htmlspecialchars($hotel_name); ?></div>
-          <div class="ds-hpill-status">● Active · <?php
-require_once 'auth_guard.php'; echo htmlspecialchars($hotel_city); ?></div>
+          <div class="ds-hpill-name"><?= htmlspecialchars($manager_name) ?></div>
+          <div class="ds-hpill-status">● <?= htmlspecialchars($manager_role) ?></div>
         </div>
       </a>
     </div>
@@ -118,10 +123,10 @@ require_once 'auth_guard.php'; echo htmlspecialchars($hotel_city); ?></div>
         <input class="ds-inp search" type="text" placeholder="Search rooms, bookings, guests" />
       </div>
       <a href="notifications.php" class="ds-ibtn"><i class="bi bi-bell-fill"></i><span class="ds-dot"></span></a>
-      <div class="ds-avbtn" id="dsAvBtn">
-        <div class="ds-av">AD</div>
-        <span class="ds-avname d-none d-sm-block">Aditi</span>
-        <i class="bi bi-chevron-down ms-1" style="font-size:.7rem;color:var(--mut)"></i>
+        <div class="ds-avbtn" id="dsAvBtn">
+          <div class="ds-av"><?= $manager_initials ?></div>
+          <span class="ds-avname d-none d-sm-block"><?= htmlspecialchars($manager_firstname ?: $manager_name) ?></span>
+          <i class="bi bi-chevron-down ms-1" style="font-size:.7rem;color:var(--mut)"></i>
         <div class="ds-dropdown" id="dsAvMenu">
           <a href="profile.php" class="ds-drop-item"><i class="bi bi-person-fill text-primary"></i> My Profile</a>
           <a href="settings.php" class="ds-drop-item"><i class="bi bi-gear-fill text-primary"></i> Settings</a>

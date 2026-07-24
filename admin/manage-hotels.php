@@ -1,6 +1,6 @@
 ﻿<?php
 require_once 'auth_guard.php';
-require_once '../hotel/db.php';
+require_once 'db.php';
 require_once '../hotel/hotel_functions.php';
 
 // ── POST handlers ─────────────────────────────────────────────────────────
@@ -30,9 +30,16 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['action'])) {
         elseif (!empty($_POST['image_url'])) $images_json = json_encode([trim($_POST['image_url'])]);
 
         $assigned = (int)($_POST['assigned_to'] ?? 0);
+        $city_id  = (int)($_POST['city_id'] ?? 0);
+        $city_name = strtolower(trim($_POST['city'] ?? ''));
+        if ($city_id) {
+            $cr = mysqli_query($conn, "SELECT city_name FROM cities WHERE id=$city_id");
+            if ($cr && ($crow = mysqli_fetch_assoc($cr))) $city_name = strtolower($crow['city_name']);
+        }
         $data = [
             'hotel_name'          => trim($_POST['hotel_name'] ?? ''),
-            'city'                => strtolower(trim($_POST['city'] ?? '')),
+            'city_id'             => $city_id > 0 ? $city_id : null,
+            'city'                => $city_name,
             'location'            => trim($_POST['location'] ?? ''),
             'state'               => trim($_POST['state'] ?? ''),
             'description'         => trim($_POST['description'] ?? ''),
@@ -55,24 +62,29 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['action'])) {
             'assigned_to'         => $assigned ?: null,
         ];
 
-        if (empty($data['hotel_name']) || empty($data['city']) || $data['price_per_night'] <= 0) {
+        if (empty($data['hotel_name']) || (!$data['city_id'] && empty($data['city'])) || $data['price_per_night'] <= 0) {
             echo json_encode(['success'=>false,'message'=>'Hotel name, city, and price are required.']); exit;
         }
 
         if ($action === 'add') {
             $new_id = bhInsertHotel($data);
-            if ($new_id && $data['assigned_to']) {
-                $av = (int)$data['assigned_to'];
-                mysqli_query($conn,"UPDATE hotels SET assigned_to=$av WHERE hotel_id=$new_id");
+            error_log('bhInsertHotel result: ' . var_export($new_id, true) . ' error: ' . mysqli_error($conn));
+            if ($new_id) {
+                if ($data['assigned_to']) {
+                    $av = (int)$data['assigned_to'];
+                    mysqli_query($conn,"UPDATE hotels SET assigned_to=$av WHERE hotel_id=$new_id");
+                }
+                echo json_encode(['success'=>true,'message'=>'Hotel added successfully!']);
+            } else {
+                echo json_encode(['success'=>false,'message'=>'Error adding hotel: '.mysqli_error($conn)]);
             }
-            echo json_encode($new_id ? ['success'=>true,'message'=>'Hotel added successfully!'] : ['success'=>false,'message'=>'Error adding hotel.']);
         } else {
             $ok = bhUpdateHotel($hid, $data);
             if ($ok) {
                 $av = $data['assigned_to'] ? (int)$data['assigned_to'] : 'NULL';
                 mysqli_query($conn,"UPDATE hotels SET assigned_to=$av WHERE hotel_id=$hid");
             }
-            echo json_encode($ok ? ['success'=>true,'message'=>'Hotel updated successfully!'] : ['success'=>false,'message'=>'Error updating hotel.']);
+            echo json_encode($ok ? ['success'=>true,'message'=>'Hotel updated successfully!'] : ['success'=>false,'message'=>'Error updating hotel: '.mysqli_error($conn)]);
         }
         exit;
     }
@@ -101,9 +113,11 @@ $rejected= (int) mysqli_fetch_assoc(mysqli_query($conn,"SELECT COUNT(*) AS c FRO
 // ── Filters ───────────────────────────────────────────────────────────────
 $fapp = $_GET['approval'] ?? '';
 $fs   = trim($_GET['q'] ?? '');
+$fcity = (int)($_GET['city_id'] ?? 0);
 $where=['1=1'];
 if ($fapp) $where[] = "approval_status='".mysqli_real_escape_string($conn,$fapp)."'";
 if ($fs)   { $s=$fs; $where[] = "(hotel_name LIKE '%$s%' OR city LIKE '%$s%')"; }
+if ($fcity) $where[] = "city_id=$fcity";
 
 $hotels_list=[];
 $res=mysqli_query($conn,"SELECT * FROM hotels WHERE ".implode(' AND ',$where)." ORDER BY created_at DESC");
@@ -112,6 +126,10 @@ if ($res) while ($row=mysqli_fetch_assoc($res)) $hotels_list[]=$row;
 $users_list=[];
 $ures=mysqli_query($conn,"SELECT id,first_name,last_name,email FROM users ORDER BY first_name ASC");
 if ($ures) while ($ur=mysqli_fetch_assoc($ures)) $users_list[]=$ur;
+
+$cities_list=[];
+$cr=mysqli_query($conn,"SELECT id,city_name,state FROM cities WHERE status='active' ORDER BY city_name ASC");
+if ($cr) while ($row=mysqli_fetch_assoc($cr)) $cities_list[]=$row;
 
 $pageTitle='Hotel Management';
 $pageSubtitle='Property listings, approvals, and assignments · Live DB';
@@ -141,6 +159,12 @@ include 'partials/header.php';
         <div class="ds-sw"><i class="bi bi-search ds-si-ic"></i>
           <input class="ds-inp search" name="q" placeholder="Search hotels..." value="<?= htmlspecialchars($fs) ?>" style="width:180px"/>
         </div>
+        <select class="ds-inp ds-sel" name="city_id" style="width:180px" onchange="this.form.submit()">
+          <option value="">All Cities</option>
+          <?php foreach ($cities_list as $c): ?>
+          <option value="<?= $c['id'] ?>" <?= $fcity===$c['id']?'selected':'' ?>><?= htmlspecialchars(ucfirst($c['city_name'])) ?></option>
+          <?php endforeach; ?>
+        </select>
         <select class="ds-inp ds-sel" name="approval" style="width:140px" onchange="this.form.submit()">
           <option value="">All</option>
           <option value="approved" <?= $fapp==='approved'?'selected':'' ?>>Approved</option>
@@ -174,6 +198,13 @@ include 'partials/header.php';
                     if ($u['id'] == $h['assigned_to']) { $assigned_name = htmlspecialchars($u['first_name'].' '.$u['last_name']); break; }
                 }
             }
+            // resolve city name from city_id
+            $hcity_name = ucfirst($h['city']);
+            if ($h['city_id']) {
+                foreach ($cities_list as $c) {
+                    if ($c['id'] == $h['city_id']) { $hcity_name = htmlspecialchars(ucfirst($c['city_name'])); break; }
+                }
+            }
         ?>
           <tr id="hotelRow<?= $h['hotel_id'] ?>">
             <td>
@@ -186,7 +217,7 @@ include 'partials/header.php';
                 </div>
               </div>
             </td>
-            <td class="small"><?= htmlspecialchars(ucfirst($h['city'])) ?></td>
+            <td class="small"><?= $hcity_name ?></td>
             <td class="fw-700 small">₹<?= number_format($h['price_per_night']) ?></td>
             <td><span class="badge bg-warning text-dark"><?= $h['rating'] ?> ★</span></td>
             <td><span class="ds-badge <?= $h['availability_status']==='active'?'confirmed':'pending' ?>"><?= ucfirst($h['availability_status']) ?></span></td>
@@ -259,7 +290,7 @@ include 'partials/header.php';
           <div id="editHotelFields" class="d-none">
             <?php
             // Render all field names — JS will populate values
-            $eh = ['hotel_id'=>0,'hotel_name'=>'','city'=>'','state'=>'','location'=>'',
+            $eh = ['hotel_id'=>0,'hotel_name'=>'','city_id'=>0,'city'=>'','state'=>'','location'=>'',
                    'description'=>'','price_per_night'=>0,'original_price'=>0,'rating'=>4,
                    'star_rating'=>3,'property_type'=>'hotel','amenities'=>'','capacity'=>2,
                    'availability_status'=>'active','hotel_images'=>'','featured'=>0,
@@ -298,6 +329,17 @@ include 'partials/header.php';
 
 <script>
 // ── Add Hotel ────────────────────────────────────────────────────────────
+function previewImage(input, previewId) {
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      document.getElementById(previewId).src = e.target.result;
+      document.getElementById(previewId).classList.remove('d-none');
+    };
+    reader.readAsDataURL(input.files[0]);
+  }
+}
+
 function openAddModal() {
   document.getElementById('addHotelForm').reset();
   document.getElementById('addHotelAlert').className = 'alert d-none mb-3';
@@ -308,29 +350,42 @@ document.getElementById('addHotelForm').addEventListener('submit', function(e) {
   e.preventDefault();
   const alertEl = document.getElementById('addHotelAlert');
   const name  = this.querySelector('[name="hotel_name"]').value.trim();
-  const city  = this.querySelector('[name="city"]').value.trim();
+  const cityId = parseInt(this.querySelector('[name="city_id"]').value) || 0;
   const price = parseFloat(this.querySelector('[name="price_per_night"]').value);
-  if (!name || !city || price <= 0) {
+  if (!name || !cityId || price <= 0) {
     alertEl.className = 'alert alert-danger mb-3';
     alertEl.textContent = 'Hotel name, city, and a valid price are required.'; return;
   }
   const btn = this.querySelector('button[type="submit"]');
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving…';
   btn.disabled = true;
+  alertEl.className = 'alert d-none mb-3';
   fetch('manage-hotels.php', { method:'POST', body: new FormData(this) })
-  .then(r => r.json())
-  .then(d => {
-    btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Add Hotel'; btn.disabled = false;
-    if (d.success) {
-      alertEl.className = 'alert alert-success mb-3';
-      alertEl.textContent = '✓ ' + d.message + ' Refreshing…';
-      setTimeout(() => location.reload(), 1200);
-    } else {
-      alertEl.className = 'alert alert-danger mb-3';
-      alertEl.textContent = '✗ ' + d.message;
-    }
+  .then(r => {
+        if (!r.ok) throw new Error('Server returned ' + r.status + ' ' + r.statusText);
+        const ct = r.headers.get('content-type') || '';
+        if (!ct.includes('application/json')) throw new Error('Invalid response type: ' + ct);
+        return r.json();
+      })
+      .then(d => {
+      btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Add Hotel'; btn.disabled = false;
+      if (d.success) {
+        alertEl.className = 'alert alert-success mb-3';
+        alertEl.innerHTML = '<strong>Success:</strong> ' + d.message;
+        const modal = bootstrap.Modal.getInstance(document.getElementById('addHotelModal'));
+        if (modal) modal.hide();
+        this.reset();
+        setTimeout(function() { loadHotelTable(); }, 500);
+      } else {
+        alertEl.className = 'alert alert-danger mb-3';
+        alertEl.innerHTML = '<strong>Error:</strong> ' + (d.message || 'Unknown error');
+      }
   })
-  .catch(() => { btn.innerHTML='<i class="bi bi-check-lg me-1"></i>Add Hotel'; btn.disabled=false; });
+  .catch(err => {
+    btn.innerHTML='<i class="bi bi-check-lg me-1"></i>Add Hotel'; btn.disabled=false;
+    alertEl.className = 'alert alert-danger mb-3';
+    alertEl.innerHTML = '<strong>Network Error:</strong> ' + err.message + ' — the server may be down or returned an invalid response.';
+  });
 });
 
 // ── Edit Hotel ───────────────────────────────────────────────────────────
@@ -378,6 +433,7 @@ function openEditModal(hotelId) {
     setS('property_type',       h.property_type);
     setS('availability_status', h.availability_status);
     setS('assigned_to',         h.assigned_to || '');
+    setS('city_id',             h.city_id || '');
 
     // Featured checkbox
     const featCb = form.querySelector('[name="featured"]');
@@ -400,6 +456,31 @@ function openEditModal(hotelId) {
   .catch(() => { loading.innerHTML = '<div class="text-danger">Failed to load hotel data.</div>'; });
 }
 
+function loadHotelTable() {
+  fetch('manage-hotels.php?ajax=1&t=' + Date.now())
+  .then(r => {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.text();
+  })
+  .then(html => {
+    const container = document.getElementById('hotelTableContainer');
+    if (container) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      const newTable = tmp.querySelector('#hotelTableContainer');
+      if (newTable) {
+        container.innerHTML = newTable.innerHTML;
+      } else {
+        location.reload();
+      }
+    }
+  })
+  .catch(err => {
+    console.error('loadHotelTable error:', err.message);
+    location.reload();
+  });
+}
+
 document.getElementById('editHotelForm').addEventListener('submit', function(e) {
   e.preventDefault();
   const alertEl = document.getElementById('editHotelAlert');
@@ -412,14 +493,20 @@ document.getElementById('editHotelForm').addEventListener('submit', function(e) 
     btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save Changes'; btn.disabled = false;
     if (d.success) {
       alertEl.className = 'alert alert-success mb-3';
-      alertEl.textContent = '✓ ' + d.message + ' Refreshing…';
-      setTimeout(() => location.reload(), 1200);
+      alertEl.textContent = '✓ ' + d.message;
+      const modal = bootstrap.Modal.getInstance(document.getElementById('editHotelModal'));
+      if (modal) modal.hide();
+      loadHotelTable();
     } else {
       alertEl.className = 'alert alert-danger mb-3';
       alertEl.textContent = '✗ ' + d.message;
     }
   })
-  .catch(() => { btn.innerHTML='<i class="bi bi-check-lg me-1"></i>Save Changes'; btn.disabled=false; });
+  .catch(err => {
+    btn.innerHTML='<i class="bi bi-check-lg me-1"></i>Save Changes'; btn.disabled=false;
+    alertEl.className = 'alert alert-danger mb-3';
+    alertEl.textContent = '✗ Request failed: ' + err.message;
+  });
 });
 
 // ── Approve / Reject ─────────────────────────────────────────────────────
@@ -450,7 +537,7 @@ function submitDeleteHotel() {
   fd.append('action','delete'); fd.append('hotel_id',id);
   fetch('manage-hotels.php',{method:'POST',body:fd})
   .then(r=>r.json())
-  .then(d=>{ if(d.success){ location.reload(); } else { alert(d.message); } });
+  .then(d=>{ if(d.success){ loadHotelTable(); } else { alert(d.message); } });
 }
 </script>
 

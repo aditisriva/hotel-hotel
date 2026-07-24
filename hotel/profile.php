@@ -4,6 +4,36 @@ if (!isset($_SESSION['user_id']) && !isset($_SESSION['hm_id'])) {
     header('Location: login.php?redirect=profile.php');
     exit;
 }
+
+require_once 'db.php';
+
+$profile_name = '';
+$profile_email = '';
+$profile_initials = '';
+
+if (isset($_SESSION['hm_id'])) {
+    $manager = getCurrentHotelManager();
+    if ($manager) {
+        $profile_name = $manager['first_name'] . ' ' . $manager['last_name'];
+        $profile_email = $manager['email'];
+        $profile_initials = strtoupper(substr($manager['first_name'], 0, 1) . substr($manager['last_name'], 0, 1));
+    }
+} elseif (isset($_SESSION['user_id'])) {
+    $stmt = mysqli_prepare($conn, "SELECT first_name, last_name, email FROM users WHERE id = ? LIMIT 1");
+    mysqli_stmt_bind_param($stmt, 'i', $_SESSION['user_id']);
+    mysqli_stmt_execute($stmt);
+    $res = mysqli_stmt_get_result($stmt);
+    $u = mysqli_fetch_assoc($res);
+    mysqli_stmt_close($stmt);
+    if ($u) {
+        $profile_name = $u['first_name'] . ' ' . $u['last_name'];
+        $profile_email = $u['email'];
+        $profile_initials = strtoupper(substr($u['first_name'], 0, 1) . substr($u['last_name'], 0, 1));
+    }
+}
+
+$is_logged_in   = isset($_SESSION['hm_id']) || isset($_SESSION['user_id']);
+$user_firstname = $is_logged_in ? htmlspecialchars($profile_name ?: ($_SESSION['hm_firstname'] ?? $_SESSION['user_name'] ?? 'User')) : '';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -55,16 +85,16 @@ if (!isset($_SESSION['user_id']) && !isset($_SESSION['hm_id'])) {
     </nav>
     <div class="pf-hero__inner">
       <!-- Avatar -->
-      <div class="pf-hero__avatar-wrap">
-        <div class="pf-hero__avatar" id="heroAvatar">AD</div>
+<div class="pf-hero__avatar-wrap">
+         <div class="pf-hero__avatar" id="heroAvatar"><?= htmlspecialchars($profile_initials ?: 'U') ?></div>
         <button class="pf-hero__avatar-edit" aria-label="Change photo" title="Change photo">
           <i class="bi bi-camera-fill"></i>
         </button>
       </div>
       <!-- Info -->
       <div class="pf-hero__info">
-        <div class="pf-hero__name" id="heroName">Aditi</div>
-        <div class="pf-hero__email" id="heroEmail">aditi@bookhotel.com</div>
+<div class="pf-hero__name" id="heroName"><?= htmlspecialchars($profile_name ?: 'User') ?></div>
+         <div class="pf-hero__email" id="heroEmail"><?= htmlspecialchars($profile_email) ?></div>
         <div class="pf-hero__meta">
           <span><i class="bi bi-calendar3"></i> Member Since June 2024</span>
           <span class="pf-hero__sep"></span>
@@ -168,14 +198,14 @@ if (!isset($_SESSION['user_id']) && !isset($_SESSION['hm_id'])) {
               <div class="col-12 col-sm-6">
                 <div class="pf-field">
                   <label class="pf-label" for="pfName"><i class="bi bi-person me-1"></i>Full Name</label>
-                  <input type="text" class="pf-input" id="pfName" value="Aditi Sharma" disabled/>
+                   <input type="text" class="pf-input" id="pfName" value="<?= htmlspecialchars($profile_name) ?>" disabled/>
                 </div>
               </div>
 
               <div class="col-12 col-sm-6">
                 <div class="pf-field">
                   <label class="pf-label" for="pfEmail"><i class="bi bi-envelope me-1"></i>Email Address</label>
-                  <input type="email" class="pf-input" id="pfEmail" value="aditi@bookhotel.com" disabled/>
+                   <input type="email" class="pf-input" id="pfEmail" value="<?= htmlspecialchars($profile_email) ?>" disabled/>
                 </div>
               </div>
 

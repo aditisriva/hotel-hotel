@@ -8,6 +8,40 @@ $is_logged_in   = isset($_SESSION['user_id']);
 $user_firstname = $is_logged_in ? htmlspecialchars($_SESSION['user_firstname'] ?? $_SESSION['user_name'] ?? 'User') : '';
 $user_initial   = $is_logged_in ? strtoupper(substr($_SESSION['user_firstname'] ?? $_SESSION['user_name'] ?? 'U', 0, 1)) : '';
 
+// ── Handle review submission ──────────────────────────────────────────
+$review_msg = '';
+$review_type = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_action'])) {
+    if (!$is_logged_in) {
+        $review_msg = 'Please log in to submit a review.';
+        $review_type = 'danger';
+    } else {
+        $rating  = (float)($_POST['rating'] ?? 0);
+        $comment = trim($_POST['comment'] ?? '');
+        $booking_id = trim($_POST['booking_id'] ?? '');
+        if ($rating < 1 || $rating > 5 || empty($comment)) {
+            $review_msg = 'Please provide a rating (1–5) and a review.';
+            $review_type = 'danger';
+        } else {
+            $result = bhSubmitReview([
+                'hotel_id'   => $hotel_id,
+                'booking_id' => $booking_id ?: null,
+                'user_id'    => $_SESSION['user_id'],
+                'guest_name' => $_SESSION['user_name'] ?? 'User',
+                'rating'     => $rating,
+                'comment'    => $comment,
+            ]);
+            if ($result) {
+                $review_msg = 'Thank you! Your review has been submitted and is awaiting approval.';
+                $review_type = 'success';
+            } else {
+                $review_msg = 'Failed to submit review. Please try again.';
+                $review_type = 'danger';
+            }
+        }
+    }
+}
+
 // ── Fetch hotel from DB ──────────────────────────────────────────────────
 $hotel_id_req = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $hotel = $hotel_id_req ? bhGetHotelById($hotel_id_req) : null;
@@ -383,207 +417,172 @@ $id_qs = 'id=' . $hotel_id . ($full_qs_str ? str_replace('?','&',$full_qs_str) :
           </div>
         </div>
 
-        <!-- Room Types -->
+        <!-- Room Types (Dynamic from DB) -->
         <div class="detail-card mb-4">
-          <h5 class="fw-700 mb-4"><i class="bi bi-door-open text-primary me-2"></i>Room Types</h5>
+          <h5 class="fw-700 mb-4"><i class="bi bi-door-open text-primary me-2"></i>Available Rooms</h5>
+          <?php
+            // Fetch only Available rooms for this hotel from DB
+            $db_rooms = bhGetRoomsByHotel($hotel_id, true);
+            $base_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+          ?>
+          <?php if (empty($db_rooms)): ?>
+            <div class="text-center py-5">
+              <i class="bi bi-door-closed fs-1 text-muted opacity-50 d-block mb-3"></i>
+              <p class="text-muted fw-500">No rooms are currently available for this hotel.</p>
+              <p class="text-muted small">Please check back later or contact the hotel directly.</p>
+            </div>
+          <?php else: ?>
           <div class="d-flex flex-column gap-3">
+            <?php foreach ($db_rooms as $r):
+                // Images
+                $r_imgs = !empty($r['room_images']) ? json_decode($r['room_images'], true) : [];
+                $r_img  = (!empty($r_imgs) && is_array($r_imgs))
+                    ? (str_starts_with($r_imgs[0], 'http') ? $r_imgs[0] : $base_url . '/Prrrooooojjjeeecccttt/hotel/' . ltrim($r_imgs[0], '/'))
+                    : 'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=400&q=80';
 
-            <!-- Room 1: Deluxe -->
+                // Price: prefer final_price, fallback to base_price, fallback to hotel price
+                $r_base  = (float)($r['base_price']  ?? 0);
+                $r_final = (float)($r['final_price']  ?? 0);
+                $r_price = ($r_final > 0) ? $r_final : (($r_base > 0) ? $r_base : $hotel_price);
+                $r_orig  = ($r_base  > 0) ? $r_base  : $hotel_orig;
+                $r_disc  = ($r_base > 0 && $r_final > 0 && $r_final < $r_base) ? round((1 - $r_final / $r_base) * 100) : 0;
+
+                // Name & capacity
+                $r_type   = htmlspecialchars($r['room_type'] ?? 'Room');
+                $r_num    = htmlspecialchars($r['room_number'] ?? '');
+                $r_floor  = htmlspecialchars($r['floor'] ?? '1st');
+                $r_bed    = htmlspecialchars($r['bed_type'] ?? 'Double Bed');
+                $adults   = (int)($r['adult_capacity'] ?? 2);
+                $children = (int)($r['child_capacity'] ?? 0);
+                $cap_str  = $adults . ' Adult' . ($adults !== 1 ? 's' : '');
+                if ($children > 0) $cap_str .= ', ' . $children . ' Child' . ($children !== 1 ? 'ren' : '');
+
+                // Amenities tags (comma-separated string)
+                $amenities_arr = $r['amenities'] ? array_map('trim', explode(',', $r['amenities'])) : [];
+
+                // Status badge
+                $r_status = $r['status'] ?? 'Available';
+
+                // Booking URL
+                $book_url = 'review-booking.php?room=' . urlencode($r['room_type'] ?? 'standard')
+                          . '&room_id=' . (int)$r['room_id']
+                          . '&id=' . $hotel_id . $booking_qs;
+            ?>
             <div class="room-card">
               <div class="row g-0">
                 <div class="col-4 col-md-3">
-                  <img src="https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=300&q=80" class="room-img" alt="Deluxe Room"/>
+                  <img src="<?= htmlspecialchars($r_img) ?>" class="room-img" alt="<?= $r_type ?>"/>
                 </div>
                 <div class="col-8 col-md-9">
                   <div class="p-3 h-100 d-flex flex-column justify-content-between">
                     <div>
-                      <h6 class="fw-700 mb-1">Deluxe Heritage Room</h6>
-                      <p class="text-muted small mb-2">30 m² · King Bed · City View · Non-smoking</p>
+                      <div class="d-flex justify-content-between align-items-start mb-1">
+                        <h6 class="fw-700 mb-0"><?= $r_type ?> <?= $r_num ? '· Room '.$r_num : '' ?></h6>
+                        <span class="badge <?= strtolower($r_status) === 'available' ? 'bg-success' : 'bg-secondary' ?> ms-2 small"><?= htmlspecialchars($r_status) ?></span>
+                      </div>
+                      <p class="text-muted small mb-2">
+                        Floor: <?= $r_floor ?> · <?= $r_bed ?> · <?= $cap_str ?>
+                      </p>
+                      <?php if (!empty($amenities_arr)): ?>
                       <div class="d-flex flex-wrap gap-1 mb-2">
-                        <span class="amenity-tag"><i class="bi bi-wifi"></i> WiFi</span>
-                        <span class="amenity-tag"><i class="bi bi-cup-hot"></i> Breakfast</span>
-                        <span class="amenity-tag"><i class="bi bi-arrow-repeat"></i> Free Cancel</span>
+                        <?php foreach (array_slice($amenities_arr, 0, 5) as $am): ?>
+                          <span class="amenity-tag"><i class="bi <?= htmlspecialchars(bhAmenityIcon($am)) ?>"></i> <?= htmlspecialchars(ucfirst($am)) ?></span>
+                        <?php endforeach; ?>
+                        <?php if (count($amenities_arr) > 5): ?>
+                          <span class="amenity-tag text-muted">+<?= count($amenities_arr) - 5 ?> more</span>
+                        <?php endif; ?>
                       </div>
+                      <?php endif; ?>
                     </div>
-                    <div class="d-flex justify-content-between align-items-center mt-2">
+                    <div class="d-flex justify-content-between align-items-center mt-2 flex-wrap gap-2">
                       <div>
-                        <?php bhPriceBlock($hotel_price, $hotel_orig); ?>
+                        <?php bhPriceBlock($r_price, $r_orig); ?>
                       </div>
-                      <a href="review-booking.php?room=deluxe&id=<?php echo $hotel_id; ?><?php echo $booking_qs; ?>" class="btn btn-primary btn-sm px-4">Select</a>
+                      <a href="<?= $book_url ?>" class="btn btn-primary btn-sm px-4">
+                        <i class="bi bi-calendar-check me-1"></i>Book Now
+                      </a>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-
-            <!-- Room 2: Royal Suite -->
-            <div class="room-card">
-              <div class="row g-0">
-                <div class="col-4 col-md-3">
-                  <img src="https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=300&q=80" class="room-img" alt="Royal Suite"/>
-                </div>
-                <div class="col-8 col-md-9">
-                  <div class="p-3 h-100 d-flex flex-column justify-content-between">
-                    <div>
-                      <h6 class="fw-700 mb-1">Royal Suite</h6>
-                      <p class="text-muted small mb-2">65 m² · King Bed · Fort View · Balcony</p>
-                      <div class="d-flex flex-wrap gap-1 mb-2">
-                        <span class="amenity-tag"><i class="bi bi-wifi"></i> WiFi</span>
-                        <span class="amenity-tag"><i class="bi bi-cup-hot"></i> Breakfast</span>
-                        <span class="amenity-tag"><i class="bi bi-flower1"></i> Spa Access</span>
-                      </div>
-                    </div>
-                    <div class="d-flex justify-content-between align-items-center mt-2">
-                      <div>
-                        <?php bhPriceBlock(9800, 14000); ?>
-                      </div>
-                      <a href="review-booking.php?room=royal&id=<?php echo $hotel_id; ?><?php echo $booking_qs; ?>" class="btn btn-primary btn-sm px-4">Select</a>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Room 3: Maharaja Suite -->
-            <div class="room-card">
-              <div class="row g-0">
-                <div class="col-4 col-md-3">
-                  <img src="https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=300&q=80" class="room-img" alt="Maharaja Suite"/>
-                </div>
-                <div class="col-8 col-md-9">
-                  <div class="p-3 h-100 d-flex flex-column justify-content-between">
-                    <div>
-                      <h6 class="fw-700 mb-1">Maharaja Presidential Suite</h6>
-                      <p class="text-muted small mb-2">120 m² · Private Terrace · Panoramic View</p>
-                      <div class="d-flex flex-wrap gap-1 mb-2">
-                        <span class="amenity-tag"><i class="bi bi-wifi"></i> WiFi</span>
-                        <span class="amenity-tag"><i class="bi bi-cup-hot"></i> All Meals</span>
-                        <span class="amenity-tag"><i class="bi bi-person-check"></i> Butler</span>
-                      </div>
-                    </div>
-                    <div class="d-flex justify-content-between align-items-center mt-2">
-                      <div>
-                        <?php bhPriceBlock(19500, 28000); ?>
-                      </div>
-                      <a href="review-booking.php?room=maharaja&id=<?php echo $hotel_id; ?><?php echo $booking_qs; ?>" class="btn btn-primary btn-sm px-4">Select</a>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
+            <?php endforeach; ?>
           </div>
+          <?php endif; ?>
         </div>
 
-        <!-- Guest Reviews -->
+
+         <!-- Guest Reviews -->
         <div class="detail-card mb-4">
           <div class="d-flex justify-content-between align-items-center mb-4">
             <h5 class="fw-700 mb-0"><i class="bi bi-chat-quote text-primary me-2"></i>Guest Reviews</h5>
             <div class="d-flex align-items-center gap-2">
-              <div class="rating-big">4.9</div>
+              <div class="rating-big"><?php echo number_format($hotel_rating, 1); ?></div>
               <div>
-                <div class="fw-700 small">Exceptional</div>
-                <div class="text-muted small">1,284 reviews</div>
+                <div class="fw-700 small">Based on <?php echo bhGetReviewCount($hotel_id); ?> reviews</div>
+                <div class="text-muted small"><?php echo bhGetAverageRating($hotel_id); ?> average</div>
               </div>
             </div>
           </div>
-
-          <!-- Rating Bars -->
-          <div class="row g-2 mb-4">
-            <div class="col-6">
-              <div class="d-flex align-items-center gap-2 mb-2">
-                <span class="text-muted small w-auto" style="min-width:90px">Cleanliness</span>
-                <div class="progress flex-grow-1" style="height:6px"><div class="progress-bar bg-success" style="width:98%"></div></div>
-                <span class="small fw-600">4.9</span>
-              </div>
-              <div class="d-flex align-items-center gap-2 mb-2">
-                <span class="text-muted small w-auto" style="min-width:90px">Service</span>
-                <div class="progress flex-grow-1" style="height:6px"><div class="progress-bar bg-success" style="width:96%"></div></div>
-                <span class="small fw-600">4.8</span>
-              </div>
-              <div class="d-flex align-items-center gap-2">
-                <span class="text-muted small w-auto" style="min-width:90px">Location</span>
-                <div class="progress flex-grow-1" style="height:6px"><div class="progress-bar bg-success" style="width:94%"></div></div>
-                <span class="small fw-600">4.7</span>
-              </div>
-            </div>
-            <div class="col-6">
-              <div class="d-flex align-items-center gap-2 mb-2">
-                <span class="text-muted small w-auto" style="min-width:90px">Value</span>
-                <div class="progress flex-grow-1" style="height:6px"><div class="progress-bar bg-success" style="width:92%"></div></div>
-                <span class="small fw-600">4.6</span>
-              </div>
-              <div class="d-flex align-items-center gap-2 mb-2">
-                <span class="text-muted small w-auto" style="min-width:90px">Amenities</span>
-                <div class="progress flex-grow-1" style="height:6px"><div class="progress-bar bg-success" style="width:96%"></div></div>
-                <span class="small fw-600">4.8</span>
-              </div>
-              <div class="d-flex align-items-center gap-2">
-                <span class="text-muted small w-auto" style="min-width:90px">Food</span>
-                <div class="progress flex-grow-1" style="height:6px"><div class="progress-bar bg-success" style="width:98%"></div></div>
-                <span class="small fw-600">4.9</span>
-              </div>
-            </div>
+          <?php if ($review_msg): ?>
+          <div class="alert alert-<?php echo $review_type; ?> alert-dismissible fade show" role="alert">
+            <?php echo htmlspecialchars($review_msg); ?>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
           </div>
-
-          <!-- Review Cards -->
+          <?php endif; ?>
+          <?php if ($is_logged_in): ?>
+          <div class="detail-card mb-4" style="border:1px solid var(--bs-border-color)">
+            <h6 class="fw-700 mb-3"><i class="bi bi-pencil-square text-primary me-2"></i>Write a Review</h6>
+            <form method="POST" id="reviewForm">
+              <input type="hidden" name="review_action" value="submit"/>
+              <div class="row g-2 mb-2">
+                <div class="col-12">
+                  <label class="form-label small fw-600">Your Rating</label>
+                  <select name="rating" class="form-select form-select-sm" required>
+                    <option value="">Select rating...</option>
+                    <option value="5">★★★★★ Excellent</option>
+                    <option value="4">★★★★☆ Very Good</option>
+                    <option value="3">★★★☆☆ Average</option>
+                    <option value="2">★★☆☆☆ Poor</option>
+                    <option value="1">★☆☆☆☆ Terrible</option>
+                  </select>
+                </div>
+                <div class="col-12">
+                  <label class="form-label small fw-600">Your Review</label>
+                  <textarea name="comment" class="form-control form-control-sm" rows="3" placeholder="Share your experience..." required></textarea>
+                </div>
+              </div>
+              <button type="submit" class="btn btn-warning btn-sm">Submit Review</button>
+            </form>
+          </div>
+          <?php endif; ?>
+          <?php
+          $approved_reviews = bhGetReviewsByHotel($hotel_id, 0, 10);
+          if (empty($approved_reviews)): ?>
+          <div class="text-center py-4 text-muted"><i class="bi bi-chat-square" style="font-size:2rem;opacity:.3"></i><div class="mt-2 small">No reviews yet. Be the first to review!</div></div>
+          <?php else: ?>
           <div class="row g-3">
+            <?php foreach ($approved_reviews as $rev): ?>
             <div class="col-12 col-md-6">
               <div class="review-card p-3 h-100">
-                <div class="d-flex gap-1 text-warning mb-2 small">★★★★★</div>
-                <p class="text-muted small mb-3">"Absolutely breathtaking property. The architecture, the food, the service — everything was flawless. Felt like a true Maharaja. Will definitely return!"</p>
+                <div class="d-flex gap-1 text-warning mb-2 small">
+                  <?php for ($s = 1; $s <= 5; $s++): ?>
+                    <i class="bi <?php echo $s <= (int)$rev['rating'] ? 'bi-star-fill' : 'bi-star'; ?>"></i>
+                  <?php endfor; ?>
+                </div>
+                <p class="text-muted small mb-3">"<?php echo htmlspecialchars($rev['comment']); ?>"</p>
                 <div class="d-flex align-items-center gap-2">
-                  <img src="https://i.pravatar.cc/40?img=5" class="rounded-circle" width="36" height="36" alt="Guest"/>
+                  <div class="rounded-circle bg-warning text-dark d-inline-flex align-items-center justify-content-center" style="width:32px;height:32px;font-size:0.7rem;font-weight:700;"><?php echo strtoupper(substr($rev['first_name'] ?? 'U', 0, 1)); ?></div>
                   <div>
-                    <div class="fw-700 small">Priya Sharma</div>
-                    <div class="text-muted" style="font-size:0.72rem">Mumbai · June 2026</div>
+                    <div class="fw-700 small"><?php echo htmlspecialchars($rev['first_name'] ?? 'Guest'); ?> <?php echo htmlspecialchars($rev['last_name'] ?? ''); ?></div>
+                    <div class="text-muted" style="font-size:.72rem"><?php echo date('M Y', strtotime($rev['created_at'])); ?></div>
                   </div>
                 </div>
               </div>
             </div>
-            <div class="col-12 col-md-6">
-              <div class="review-card p-3 h-100">
-                <div class="d-flex gap-1 text-warning mb-2 small">★★★★★</div>
-                <p class="text-muted small mb-3">"The rooftop view of Amber Fort at sunset is something I will never forget. The Royal Suite was absolutely spectacular. Worth every rupee!"</p>
-                <div class="d-flex align-items-center gap-2">
-                  <img src="https://i.pravatar.cc/40?img=12" class="rounded-circle" width="36" height="36" alt="Guest"/>
-                  <div>
-                    <div class="fw-700 small">Rahul Verma</div>
-                    <div class="text-muted" style="font-size:0.72rem">Delhi · May 2026</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="col-12 col-md-6">
-              <div class="review-card p-3 h-100">
-                <div class="d-flex gap-1 text-warning mb-2 small">★★★★⭐</div>
-                <p class="text-muted small mb-3">"The heritage tour organised by the hotel was exceptional. Our guide was knowledgeable and the haveli's history is fascinating. Excellent breakfast spread!"</p>
-                <div class="d-flex align-items-center gap-2">
-                  <img src="https://i.pravatar.cc/40?img=21" class="rounded-circle" width="36" height="36" alt="Guest"/>
-                  <div>
-                    <div class="fw-700 small">Ananya Kapoor</div>
-                    <div class="text-muted" style="font-size:0.72rem">Bangalore · April 2026</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="col-12 col-md-6">
-              <div class="review-card p-3 h-100">
-                <div class="d-flex gap-1 text-warning mb-2 small">★★★★★</div>
-                <p class="text-muted small mb-3">"Booked the Maharaja Suite for our anniversary. The butler service and personalised attention was beyond 5-star. The spa treatments are world-class."</p>
-                <div class="d-flex align-items-center gap-2">
-                  <img src="https://i.pravatar.cc/40?img=33" class="rounded-circle" width="36" height="36" alt="Guest"/>
-                  <div>
-                    <div class="fw-700 small">Vikram Singh</div>
-                    <div class="text-muted" style="font-size:0.72rem">Pune · March 2026</div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <?php endforeach; ?>
           </div>
-          <div class="text-center mt-3">
-            <a href="#" class="btn btn-outline-primary btn-sm px-4">Load More Reviews</a>
-          </div>
+          <?php endif; ?>
         </div>
 
       </div><!-- end left col -->

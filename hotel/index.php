@@ -2,11 +2,10 @@
   session_start();
   $site_name    = "bookHotel";
   $current_year = date("Y");
-  // Preserve search params from URL; fall back to tomorrow/day+2 only if missing
-  $checkin    = (!empty($_GET["checkin"]))  ? trim($_GET["checkin"])  : date("Y-m-d", strtotime("+1 day"));
-  $checkout   = (!empty($_GET["checkout"])) ? trim($_GET["checkout"]) : date("Y-m-d", strtotime("+2 days"));
-  $city_idx   = (!empty($_GET["city"]))   ? trim($_GET["city"])   : "";
-  $guests_idx = (!empty($_GET["guests"])) ? (int)$_GET["guests"]  : 2;
+  // Resolve city name from city_id for display
+$city_idx   = (!empty($_GET["city"]))   ? trim($_GET["city"])   : "";
+$city_id_idx = (!empty($_GET["city_id"])) ? (int)$_GET["city_id"] : 0;
+$guests_idx = (!empty($_GET["guests"])) ? (int)$_GET["guests"]  : 2;
   $is_logged_in   = isset($_SESSION['hm_id']);
   $user_firstname = $is_logged_in ? htmlspecialchars($_SESSION['hm_firstname'] ?? $_SESSION['hm_name'] ?? 'Manager') : '';
 
@@ -15,6 +14,10 @@
   $th_res = mysqli_query($conn, "SELECT h.*, COALESCE(AVG(r.rating),0) AS avg_rating, COUNT(r.review_id) AS total_reviews FROM hotels h LEFT JOIN reviews r ON h.hotel_id=r.hotel_id AND r.status='approved' WHERE h.approval_status='approved' GROUP BY h.hotel_id ORDER BY h.featured DESC, avg_rating DESC, total_reviews DESC LIMIT 4");
   if ($th_res) while ($row = mysqli_fetch_assoc($th_res)) $top_hotels[] = $row;
   function getFirstImage($json, $fb) { $imgs = json_decode($json, true); return ($imgs && count($imgs)>0) ? $imgs[0] : $fb; }
+
+$popular_cities = [];
+$pc_res = mysqli_query($conn, "SELECT c.id, c.city_name, c.state, c.country, c.city_image, COUNT(h.hotel_id) AS hotel_count FROM cities c LEFT JOIN hotels h ON h.city_id = c.id WHERE c.status='active' AND c.is_popular=1 GROUP BY c.id ORDER BY c.city_name ASC");
+if ($pc_res) while ($row = mysqli_fetch_assoc($pc_res)) $popular_cities[] = $row;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -87,13 +90,20 @@
         <!-- Hotels Tab -->
         <div class="tab-pane fade show active" id="hotels">
           <div class="row g-2 align-items-end">
-            <div class="col-12 col-md-4">
-              <label class="form-label small fw-600 text-muted">WHERE</label>
-              <div class="input-group">
-                <span class="input-group-text bg-white border-end-0"><i class="bi bi-geo-alt-fill text-warning"></i></span>
-                <input type="text" class="form-control border-start-0 ps-0" id="searchCity" placeholder="City, hotel or destination" value="<?php echo htmlspecialchars(ucfirst($city_idx)); ?>"/>
-              </div>
-            </div>
+<div class="col-12 col-md-4">
+               <label class="form-label small fw-600 text-muted">WHERE</label>
+               <div class="input-group">
+                 <span class="input-group-text bg-white border-end-0"><i class="bi bi-geo-alt-fill text-warning"></i></span>
+                 <select class="form-select border-start-0 ps-0" id="searchCity" name="city_id">
+                   <option value="">All Cities</option>
+                   <?php foreach ($popular_cities as $pc): ?>
+                   <option value="<?= (int)$pc['id'] ?>" <?php echo ($city_id_idx && (int)$pc['id'] === $city_id_idx) ? 'selected' : ''; ?>>
+                     <?php echo htmlspecialchars(ucfirst($pc['city_name'])); ?>
+                   </option>
+                   <?php endforeach; ?>
+                 </select>
+               </div>
+             </div>
             <div class="col-6 col-md-2">
               <label class="form-label small fw-600 text-muted">CHECK-IN</label>
               <input type="date" class="form-control" id="searchCheckin" value="<?php echo $checkin; ?>"/>
@@ -177,71 +187,30 @@
       </div>
       <a href="hotels.php" class="btn btn-outline-primary btn-sm">View All</a>
     </div>
+    <?php if (empty($popular_cities)): ?>
+      <div class="text-center py-5 text-muted">
+        <i class="bi bi-geo-alt" style="font-size:3rem;opacity:.3"></i>
+        <div class="fw-bold mt-3">No popular destinations yet</div>
+      </div>
+    <?php else: ?>
     <div class="row g-3">
+      <?php foreach ($popular_cities as $pc): 
+        $img = !empty($pc['city_image']) ? htmlspecialchars($pc['city_image']) : 'https://images.unsplash.com/photo-1477959858617-3f65e62c5714?w=400&q=80';
+        $name = htmlspecialchars(ucfirst($pc['city_name']));
+        $count = (int)$pc['hotel_count'];
+      ?>
       <div class="col-6 col-md-3">
-        <a href="hotels.php?city=mumbai" class="dest-card" aria-label="Hotels in Mumbai">
-          <img src="https://images.unsplash.com/photo-1570168007204-dfb528c6958f?w=400&q=80" alt="Mumbai"/>
+        <a href="hotels.php?city_id=<?= (int)$pc['id'] ?>" class="dest-card" aria-label="Hotels in <?= $name ?>">
+          <img src="<?= $img ?>" alt="<?= $name ?>" onerror="this.src='https://images.unsplash.com/photo-1477959858617-3f65e62c5714?w=400&q=80'"/>
           <div class="dest-overlay">
-            <h5 class="fw-700 mb-0">Mumbai</h5>
-            <small>342 Hotels</small>
+            <h5 class="fw-700 mb-0"><?= $name ?></h5>
+            <small><?= $count ?> Hotels</small>
           </div>
         </a>
       </div>
-      <div class="col-6 col-md-3">
-        <a href="hotels.php?city=goa" class="dest-card" aria-label="Hotels in Goa">
-          <img src="https://images.unsplash.com/photo-1614082242765-7c98ca0f3df3?w=400&q=80" alt="Goa"/>
-          <div class="dest-overlay">
-            <h5 class="fw-700 mb-0">Goa</h5>
-            <small>218 Hotels</small>
-          </div>
-        </a>
-      </div>
-      <div class="col-6 col-md-3">
-        <a href="hotels.php?city=delhi" class="dest-card" aria-label="Hotels in Delhi">
-          <img src="https://images.unsplash.com/photo-1587474260584-136574528ed5?w=400&q=80" alt="Delhi"/>
-          <div class="dest-overlay">
-            <h5 class="fw-700 mb-0">Delhi</h5>
-            <small>415 Hotels</small>
-          </div>
-        </a>
-      </div>
-      <div class="col-6 col-md-3">
-        <a href="hotels.php?city=jaipur" class="dest-card" aria-label="Hotels in Jaipur">
-          <img src="https://images.unsplash.com/photo-1477587458883-47145ed94245?w=400&q=80" alt="Jaipur"/>
-          <div class="dest-overlay">
-            <h5 class="fw-700 mb-0">Jaipur</h5>
-            <small>187 Hotels</small>
-          </div>
-        </a>
-      </div>
-      <div class="col-6 col-md-4">
-        <a href="hotels.php?city=kerala" class="dest-card" aria-label="Hotels in Kerala">
-          <img src="https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?w=400&q=80" alt="Kerala"/>
-          <div class="dest-overlay">
-            <h5 class="fw-700 mb-0">Kerala</h5>
-            <small>296 Hotels</small>
-          </div>
-        </a>
-      </div>
-      <div class="col-6 col-md-4">
-        <a href="hotels.php?city=manali" class="dest-card" aria-label="Hotels in Manali">
-          <img src="https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?w=400&q=80" alt="Manali"/>
-          <div class="dest-overlay">
-            <h5 class="fw-700 mb-0">Manali</h5>
-            <small>143 Hotels</small>
-          </div>
-        </a>
-      </div>
-      <div class="col-12 col-md-4">
-        <a href="hotels.php?city=udaipur" class="dest-card" aria-label="Hotels in Udaipur">
-          <img src="https://images.unsplash.com/photo-1524492412937-b28074a5d7da?w=400&q=80" alt="Udaipur"/>
-          <div class="dest-overlay">
-            <h5 class="fw-700 mb-0">Udaipur</h5>
-            <small>112 Hotels</small>
-          </div>
-        </a>
-      </div>
+      <?php endforeach; ?>
     </div>
+    <?php endif; ?>
   </div>
 </section>
 
@@ -287,7 +256,13 @@
               <h6 class="fw-700 mb-0"><?= htmlspecialchars($h['hotel_name']) ?></h6>
               <span class="rating-badge"><?= $h['avg_rating'] ?> <i class="bi bi-star-fill"></i></span>
             </div>
-            <p class="text-muted small mb-2"><i class="bi bi-geo-alt-fill me-1 text-danger"></i><?= htmlspecialchars(ucfirst($h['city'])) ?>, India</p>
+            <p class="text-muted small mb-2"><i class="bi bi-geo-alt-fill me-1 text-danger"></i><?php
+    $h_city_name = ucfirst($h['city']);
+    if ($h['city_id']) {
+        $hc_row = mysqli_fetch_assoc(mysqli_query($conn, "SELECT city_name FROM cities WHERE id=" . (int)$h['city_id']));
+        if ($hc_row) $h_city_name = ucfirst($hc_row['city_name']);
+    }
+    echo htmlspecialchars($h_city_name); ?>, India</p>
             <div class="d-flex gap-1 flex-wrap mb-3"><?= $amenity_tags ?></div>
             <div class="d-flex justify-content-between align-items-center">
               <div>
@@ -565,17 +540,17 @@
 </script>
 <script>
 function searchHotels() {
-  var city    = (document.getElementById('searchCity') ? document.getElementById('searchCity').value : '').trim().toLowerCase();
-  var ci      = document.getElementById('searchCheckin')  ? document.getElementById('searchCheckin').value  : '';
-  var co      = document.getElementById('searchCheckout') ? document.getElementById('searchCheckout').value : '';
-  var guests  = document.getElementById('searchGuests')   ? document.getElementById('searchGuests').value   : '2';
-  var qs = [];
-  if (city)   qs.push('city='    + encodeURIComponent(city));
-  if (ci)     qs.push('checkin=' + encodeURIComponent(ci));
-  if (co)     qs.push('checkout='+ encodeURIComponent(co));
-  if (guests) qs.push('guests='  + encodeURIComponent(guests));
-  window.location.href = 'hotels.php' + (qs.length ? '?' + qs.join('&') : '');
-}
+   var cityId   = document.getElementById('searchCity') ? document.getElementById('searchCity').value : '';
+   var ci      = document.getElementById('searchCheckin')  ? document.getElementById('searchCheckin').value  : '';
+   var co      = document.getElementById('searchCheckout') ? document.getElementById('searchCheckout').value : '';
+   var guests  = document.getElementById('searchGuests')   ? document.getElementById('searchGuests').value   : '2';
+   var qs = [];
+   if (cityId) qs.push('city_id=' + encodeURIComponent(cityId));
+   if (ci)     qs.push('checkin=' + encodeURIComponent(ci));
+   if (co)     qs.push('checkout='+ encodeURIComponent(co));
+   if (guests) qs.push('guests='  + encodeURIComponent(guests));
+   window.location.href = 'hotels.php' + (qs.length ? '?' + qs.join('&') : '');
+ }
 document.addEventListener('DOMContentLoaded',function(){const inp=document.getElementById('searchCity');if(inp)inp.addEventListener('keydown',e=>{if(e.key==='Enter')searchHotels();});});
 </script>
 <script src="search-state.js"></script>

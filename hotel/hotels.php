@@ -5,6 +5,7 @@ require_once 'hotel_functions.php';
 
 // Read all URL params
 $city_param   = isset($_GET['city'])     ? strtolower(trim($_GET['city']))  : '';
+$city_id_param = isset($_GET['city_id']) ? (int)$_GET['city_id'] : 0;
 $city_label   = $city_param ? ucfirst($city_param) : '';
 $checkin_raw  = isset($_GET['checkin'])  ? trim($_GET['checkin'])  : '';
 $checkout_raw = isset($_GET['checkout']) ? trim($_GET['checkout']) : '';
@@ -31,15 +32,24 @@ if ($guests_raw)   $qs_parts[] = 'guests='   . $guests_raw;
 $booking_qs = $qs_parts ? '&' . implode('&', $qs_parts) : '';
 
 // -- Fetch hotels from DB --------------------------------------------------
-$filtered    = bhGetHotels($city_param, $guests_raw, $max_price, $min_rating);
+$filtered    = bhGetHotels($city_param, $guests_raw, $max_price, $min_rating, 0, $city_id_param);
 $hotel_count = count($filtered);
-$page_title  = $city_param ? "Hotels in $city_label" : "Find Your Perfect Hotel";
+// Resolve city label from city_id if available
+if ($city_id_param && !$city_param) {
+    $city_row = mysqli_fetch_assoc(mysqli_query($conn, "SELECT city_name FROM cities WHERE id=$city_id_param"));
+    if ($city_row) $city_label = ucfirst($city_row['city_name']);
+}
+$page_title  = $city_label ? "Hotels in $city_label" : "Find Your Perfect Hotel";
 $count_text  = $hotel_count . ' hotel' . ($hotel_count !== 1 ? 's' : '');
 $sub_parts = [];
 if ($city_label)   $sub_parts[] = $city_label;
 if ($checkin_fmt && $checkout_fmt) $sub_parts[] = $checkin_fmt . " -> " . $checkout_fmt . " (" . $nights . " night" . ($nights>1?"s":"") . ")";
 if ($guests_label && $guests_raw)  $sub_parts[] = $guests_label;
 $page_sub = $count_text . ' found' . ($sub_parts ? ' � ' . implode(' � ', $sub_parts) : ' across India');
+
+$active_cities = [];
+$ac_res = mysqli_query($conn, "SELECT city_name, state, country FROM cities WHERE status='active' ORDER BY city_name ASC");
+if ($ac_res) while ($row = mysqli_fetch_assoc($ac_res)) $active_cities[] = $row;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -148,14 +158,12 @@ $page_sub = $count_text . ' found' . ($sub_parts ? ' � ' . implode(' � ', $s
               <input type="text" class="form-control" placeholder="Search location..."/>
             </div>
             <div class="d-flex flex-wrap gap-2 mt-2">
-              <span class="filter-chip <?php echo !$city_param ? 'active' : ''; ?>" data-city="">All</span>
-              <span class="filter-chip <?php echo $city_param==='mumbai'  ? 'active' : ''; ?>" data-city="mumbai">Mumbai</span>
-              <span class="filter-chip <?php echo $city_param==='goa'     ? 'active' : ''; ?>" data-city="goa">Goa</span>
-              <span class="filter-chip <?php echo $city_param==='delhi'   ? 'active' : ''; ?>" data-city="delhi">Delhi</span>
-              <span class="filter-chip <?php echo $city_param==='jaipur'  ? 'active' : ''; ?>" data-city="jaipur">Jaipur</span>
-              <span class="filter-chip <?php echo $city_param==='kerala'  ? 'active' : ''; ?>" data-city="kerala">Kerala</span>
-              <span class="filter-chip <?php echo $city_param==='manali'  ? 'active' : ''; ?>" data-city="manali">Manali</span>
-              <span class="filter-chip <?php echo $city_param==='udaipur' ? 'active' : ''; ?>" data-city="udaipur">Udaipur</span>
+              <span class="filter-chip <?php echo !$city_param && !$city_id_param ? 'active' : ''; ?>" data-city-id="">All</span>
+              <?php foreach ($active_cities as $ac): 
+                $slug = strtolower($ac['city_name']);
+              ?>
+                <span class="filter-chip <?php echo ($city_param===$slug || $city_id_param==(int)$ac['id']) ? 'active' : ''; ?>" data-city-id="<?= (int)$ac['id'] ?>" data-city-slug="<?= htmlspecialchars($slug) ?>"><?= htmlspecialchars(ucfirst($ac['city_name'])) ?></span>
+              <?php endforeach; ?>
             </div>
           </div>
 
@@ -224,7 +232,7 @@ $page_sub = $count_text . ' found' . ($sub_parts ? ' � ' . implode(' � ', $s
       <div class="col-12 col-lg-9">
 
         <!-- City Banner (shown when filtering by city) -->
-        <?php if ($city_param): ?>
+        <?php if ($city_param || $city_id_param): ?>
         <div class="mb-3 p-3 rounded-3 d-flex align-items-center gap-3" style="background:linear-gradient(135deg,#e8f0fe,#dbeafe);border:1.5px solid #bfdbfe">
           <i class="bi bi-geo-alt-fill text-primary fs-4"></i>
           <div>
@@ -237,7 +245,7 @@ $page_sub = $count_text . ' found' . ($sub_parts ? ' � ' . implode(' � ', $s
 
 
         <!-- Active Search Filter Strip -->
-        <?php if ($city_param || $checkin_raw || $guests_raw): ?>
+        <?php if ($city_param || $city_id_param || $checkin_raw || $guests_raw): ?>
         <div class="d-flex flex-wrap gap-2 align-items-center mb-3 p-2 rounded-3" style="background:#f0f4ff;border:1px solid #bfdbfe">
           <span class="small fw-700 text-primary"><i class="bi bi-funnel-fill me-1"></i>Filters:</span>
           <?php if ($city_label): ?>
@@ -254,7 +262,7 @@ $page_sub = $count_text . ' found' . ($sub_parts ? ' � ' . implode(' � ', $s
         <?php endif; ?>
         <!-- Sort Bar -->
         <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3 mb-4">
-          <p class="mb-0 text-muted small"><span class="fw-700 text-dark"><?php echo $count_text; ?></span> found<?php echo $city_param ? ' in ' . htmlspecialchars($city_label) : ' in India'; ?></p>
+          <p class="mb-0 text-muted small"><span class="fw-700 text-dark"><?php echo $count_text; ?></span> found<?php echo ($city_param || $city_id_param) ? ' in ' . htmlspecialchars($city_label) : ' in India'; ?></p>
           <div class="d-flex align-items-center gap-2">
             <span class="text-muted small">Sort by:</span>
             <select class="form-select form-select-sm sort-select">
@@ -277,7 +285,7 @@ $page_sub = $count_text . ' found' . ($sub_parts ? ' � ' . implode(' � ', $s
               <div style="width:100px;height:100px;background:#e8f0fe;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 1.5rem">
                 <i class="bi bi-building-x" style="font-size:2.5rem;color:#1a56db"></i>
               </div>
-              <h4 class="fw-800 mb-2" style="color:#1a1a2e">No Hotels Found<?php echo $city_param ? ' in ' . htmlspecialchars($city_label) : ''; ?></h4>
+              <h4 class="fw-800 mb-2" style="color:#1a1a2e">No Hotels Found<?php echo ($city_param || $city_id_param) ? ' in ' . htmlspecialchars($city_label) : ''; ?></h4>
               <p class="text-muted mb-4">Try a different city or browse all available hotels.</p>
               <a href="hotels.php" class="btn btn-primary px-4 me-2"><i class="bi bi-search me-2"></i>Browse All Hotels</a>
               <a href="index.php" class="btn btn-outline-secondary px-4"><i class="bi bi-house me-2"></i>Back to Home</a>
@@ -289,6 +297,10 @@ $page_sub = $count_text . ' found' . ($sub_parts ? ' � ' . implode(' � ', $s
             $hid      = (int)$h['hotel_id'];
             $hname    = htmlspecialchars($h['hotel_name']);
             $hcity    = htmlspecialchars(ucfirst($h['city']));
+            if ($h['city_id']) {
+                $hc_row = mysqli_fetch_assoc(mysqli_query($conn, "SELECT city_name FROM cities WHERE id=" . (int)$h['city_id']));
+                if ($hc_row) $hcity = htmlspecialchars(ucfirst($hc_row['city_name']));
+            }
             $hloc     = htmlspecialchars($h['location']);
             $hstate   = htmlspecialchars($h['state'] ?? '');
             $hdesc    = htmlspecialchars($h['description'] ?? '');
@@ -315,13 +327,13 @@ $page_sub = $count_text . ' found' . ($sub_parts ? ' � ' . implode(' � ', $s
               if ($s <= $hstars) $starsHtml .= '<i class="bi bi-star-fill"></i>';
             }
             // Detail link with hotel_id
-            $detailUrl = 'hotel-details.php?id=' . $hid . '&city=' . urlencode($h['city']) . $booking_qs;
+            $detailUrl = 'hotel-details.php?id=' . $hid . '&city_id=' . (int)$h['city_id'] . $booking_qs;
           ?>
           <div class="col-12 col-md-6 col-xl-4"
                data-price="<?php echo $hprice; ?>"
                data-rating="<?php echo $hrating; ?>"
                data-name="<?php echo $hname; ?>"
-               data-location="<?php echo htmlspecialchars($h['city']); ?>"
+               data-location="<?php echo htmlspecialchars($hcity); ?>"
                data-type="<?php echo htmlspecialchars($htype); ?>">
             <div class="hotel-card card border-0 shadow-sm h-100">
               <div class="position-relative">
@@ -487,14 +499,18 @@ $page_sub = $count_text . ' found' . ($sub_parts ? ' � ' . implode(' � ', $s
     window.location.href = url;
   });
 
-  // Filter chips (city)
+// Filter chips (city)
   document.querySelectorAll('.filter-chip').forEach(chip => {
     chip.addEventListener('click', function() {
-      const city = this.dataset.city;
-      const p    = new URLSearchParams(window.location.search);
-      if (city) p.set('city', city); else p.delete('city');
+      const cityId = this.dataset.cityId;
+      const citySlug = this.dataset.citySlug;
+      const p = new URLSearchParams(window.location.search);
+      if (cityId) { p.set('city_id', cityId); p.delete('city'); }
+      else if (citySlug) { p.set('city', citySlug); p.delete('city_id'); }
+      else { p.delete('city'); p.delete('city_id'); }
       window.location.href = 'hotels.php?' + p.toString();
     });
+  });
   });
 
   // -- Client-side filter/sort on already-fetched cards ---------------------

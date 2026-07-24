@@ -1,10 +1,31 @@
 <?php
 session_start();
+require_once 'db.php';
 
-/* ── Placeholder user data (replace with DB later) ── */
-$userName   = "Aditi";
-$userEmail  = "aditi@bookhotel.com";
-$userAvatar = "A";  // initials
+$userName = '';
+$userEmail = '';
+$userAvatar = 'U';
+
+if (isset($_SESSION['hm_id'])) {
+    $manager = getCurrentHotelManager();
+    if ($manager) {
+        $userName = $manager['first_name'] . ' ' . $manager['last_name'];
+        $userEmail = $manager['email'];
+        $userAvatar = strtoupper(substr($manager['first_name'], 0, 1) . substr($manager['last_name'], 0, 1));
+    }
+} elseif (isset($_SESSION['user_id'])) {
+    $stmt = mysqli_prepare($conn, "SELECT first_name, last_name, email FROM users WHERE id = ? LIMIT 1");
+    mysqli_stmt_bind_param($stmt, 'i', $_SESSION['user_id']);
+    mysqli_stmt_execute($stmt);
+    $res = mysqli_stmt_get_result($stmt);
+    $u = mysqli_fetch_assoc($res);
+    mysqli_stmt_close($stmt);
+    if ($u) {
+        $userName = $u['first_name'] . ' ' . $u['last_name'];
+        $userEmail = $u['email'];
+        $userAvatar = strtoupper(substr($u['first_name'], 0, 1) . substr($u['last_name'], 0, 1));
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">

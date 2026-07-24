@@ -1,8 +1,19 @@
 <?php
 session_start();
 require_once 'db.php';
+require_once 'auth_guard.php';
+require_once '../hotel/hotel_functions.php';
 
-$hotel_id = 1; // Current hotel manager's hotel
+$manager = getCurrentHotelManager();
+$manager_name = $manager ? ($manager['first_name'] . ' ' . $manager['last_name']) : 'Hotel Manager';
+$manager_initials = $manager ? strtoupper(substr($manager['first_name'], 0, 1) . substr($manager['last_name'], 0, 1)) : 'M';
+$manager_firstname = $manager ? $manager['first_name'] : '';
+$manager_role = $manager ? ucwords(str_replace('_', ' ', $manager['role'])) : 'Hotel Manager';
+
+$hotel_id = (int)($_SESSION['hm_hotel_id'] ?? 0);
+if (!$hotel_id && $manager) {
+    $hotel_id = (int)($manager['hotel_id'] ?? 0);
+}
 
 // ── Auto-create reviews table ─────────────────────────────────────────────
 mysqli_query($conn, "CREATE TABLE IF NOT EXISTS `reviews` (
@@ -161,7 +172,7 @@ if ($res) while ($row = mysqli_fetch_assoc($res)) $reviews[] = $row;
   <div class="ds-top-r">
     <a href="notifications.php" class="ds-ibtn"><i class="bi bi-bell-fill"></i></a>
     <div class="ds-avbtn" id="dsAvBtn">
-      <div class="ds-av">AD</div><span class="ds-avname d-none d-sm-block">Admin</span>
+      <div class="ds-av"><?= $manager_initials ?></div><span class="ds-avname d-none d-sm-block"><?= htmlspecialchars($manager_firstname ?: $manager_name) ?></span>
       <div class="ds-dropdown" id="dsAvMenu">
         <a href="settings.php" class="ds-drop-item"><i class="bi bi-gear-fill text-primary"></i> Settings</a>
         <hr class="my-1 mx-2"/>

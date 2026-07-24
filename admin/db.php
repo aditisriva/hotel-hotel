@@ -73,6 +73,7 @@ function initializeAdminsTable() {
         `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         `last_login` TIMESTAMP NULL DEFAULT NULL,
+        `profile_image` VARCHAR(255) DEFAULT NULL,
         INDEX `idx_email` (`email`),
         INDEX `idx_mobile` (`mobile`),
         INDEX `idx_status` (`status`)
@@ -188,6 +189,95 @@ function admin_cleanOldLoginAttempts($days = 30) {
     $threshold = date('Y-m-d H:i:s', time() - ($days * 24 * 60 * 60));
     $sql = "DELETE FROM login_attempts WHERE attempted_at < '$threshold'";
     mysqli_query($conn, $sql);
+}
+
+function admin_initializeCitiesTable() {
+    global $conn;
+    $chk = mysqli_query($conn, "SHOW TABLES LIKE 'cities'");
+    $exists = $chk && mysqli_num_rows($chk) > 0;
+
+    if (!$exists) {
+        $sql = "CREATE TABLE `cities` (
+          `id`               INT(11) UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+          `city_name`        VARCHAR(100) NOT NULL,
+          `state`            VARCHAR(100) DEFAULT NULL,
+          `country`          VARCHAR(100) DEFAULT 'India',
+          `city_image`       VARCHAR(255) DEFAULT NULL,
+          `description`      TEXT DEFAULT NULL,
+          `status`           ENUM('active','inactive') DEFAULT 'active',
+          `is_popular`       TINYINT(1) DEFAULT 0,
+          `created_by`       INT(11) UNSIGNED DEFAULT NULL,
+          `created_at`       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          `updated_at`       TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          UNIQUE KEY `uniq_city_name` (`city_name`),
+          INDEX `idx_status` (`status`),
+          INDEX `idx_popular` (`is_popular`),
+          INDEX `idx_country` (`country`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+        mysqli_query($conn, $sql);
+    } else {
+        $chk_id = mysqli_query($conn, "SHOW COLUMNS FROM `cities` LIKE 'id'");
+        if ($chk_id && mysqli_num_rows($chk_id) === 0) {
+            $chk_cid = mysqli_query($conn, "SHOW COLUMNS FROM `cities` LIKE 'city_id'");
+            if ($chk_cid && mysqli_num_rows($chk_cid) > 0) {
+                mysqli_query($conn, "ALTER TABLE `cities` CHANGE COLUMN `city_id` `id` INT(11) UNSIGNED AUTO_INCREMENT PRIMARY KEY FIRST");
+            }
+        }
+        $chk_name = mysqli_query($conn, "SHOW COLUMNS FROM `cities` LIKE 'city_name'");
+        if ($chk_name && mysqli_num_rows($chk_name) === 0) {
+            $chk_old = mysqli_query($conn, "SHOW COLUMNS FROM `cities` LIKE 'name'");
+            if ($chk_old && mysqli_num_rows($chk_old) > 0) {
+                mysqli_query($conn, "ALTER TABLE `cities` CHANGE COLUMN `name` `city_name` VARCHAR(100) NOT NULL");
+            }
+        }
+    }
+
+    $alters = [
+        'state'       => "ALTER TABLE `cities` ADD COLUMN `state` VARCHAR(100) DEFAULT NULL AFTER `city_name`",
+        'country'     => "ALTER TABLE `cities` ADD COLUMN `country` VARCHAR(100) DEFAULT 'India' AFTER `state`",
+        'city_image'  => "ALTER TABLE `cities` ADD COLUMN `city_image` VARCHAR(255) DEFAULT NULL AFTER `country`",
+        'description' => "ALTER TABLE `cities` ADD COLUMN `description` TEXT DEFAULT NULL AFTER `city_image`",
+        'is_popular'  => "ALTER TABLE `cities` ADD COLUMN `is_popular` TINYINT(1) DEFAULT 0 AFTER `status`",
+        'created_by'  => "ALTER TABLE `cities` ADD COLUMN `created_by` INT(11) UNSIGNED DEFAULT NULL AFTER `is_popular`",
+    ];
+    foreach ($alters as $col => $q) {
+        $chk = mysqli_query($conn, "SHOW COLUMNS FROM `cities` LIKE '$col'");
+        if ($chk && mysqli_num_rows($chk) === 0) {
+            mysqli_query($conn, $q);
+        }
+    }
+}
+
+admin_initializeCitiesTable();
+
+function admin_handleCityImageUpload(int $cityId = 0): string {
+    if (!isset($_FILES['city_image']) || $_FILES['city_image']['error'] !== UPLOAD_ERR_OK) return '';
+    $ext = strtolower(pathinfo($_FILES['city_image']['name'], PATHINFO_EXTENSION));
+    $allowed = ['jpg','jpeg','png','webp','gif'];
+    if (!in_array($ext, $allowed)) return '';
+    $uploadDir = __DIR__ . '/uploads/cities/';
+    if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
+    $filename = 'city_' . ($cityId ?: time()) . '_' . time() . '.' . $ext;
+    if (move_uploaded_file($_FILES['city_image']['tmp_name'], $uploadDir . $filename)) {
+        return 'uploads/cities/' . $filename;
+    }
+    return '';
+}
+
+function getCurrentAdmin() {
+    global $conn;
+    if (!isset($_SESSION['admin_id'])) {
+        return null;
+    }
+    $admin_id = (int)$_SESSION['admin_id'];
+    $sql = "SELECT admin_id, first_name, last_name, email, mobile, role FROM admins WHERE admin_id = $admin_id LIMIT 1";
+    $result = mysqli_query($conn, $sql);
+    if ($result && mysqli_num_rows($result) > 0) {
+        $admin = mysqli_fetch_assoc($result);
+        $admin['profile_image'] = '';
+        return $admin;
+    }
+    return null;
 }
 
 ?>

@@ -5,6 +5,12 @@ require_once 'auth_guard.php';
 
 $user_id = $_SESSION['hm_id'] ?? 0;
 
+$manager = getCurrentHotelManager();
+$manager_name = $manager ? ($manager['first_name'] . ' ' . $manager['last_name']) : 'Hotel Manager';
+$manager_initials = $manager ? strtoupper(substr($manager['first_name'], 0, 1) . substr($manager['last_name'], 0, 1)) : 'M';
+$manager_firstname = $manager ? $manager['first_name'] : '';
+$manager_role = $manager ? ucwords(str_replace('_', ' ', $manager['role'])) : 'Hotel Manager';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
     $action = $_POST['action'] ?? '';
@@ -89,8 +95,11 @@ if ($res) while ($row = mysqli_fetch_assoc($res)) $notifications[] = $row;
   <script>document.addEventListener("DOMContentLoaded",()=>{let c=location.pathname.split("/").pop()||"admin-dashboard.php";document.querySelectorAll("#mainSidebar a").forEach(l=>{l.getAttribute("href")===c?l.classList.add("active"):l.classList.remove("active")})});</script>
   <div class="ds-foot">
     <a href="manage-hotel-listing.php" class="ds-hpill">
-      <img src="https://images.unsplash.com/photo-1566073771259-6a8506099945?w=80&q=80" alt=""/>
-      <div><div class="ds-hpill-name">Hotel Manager</div><div class="ds-hpill-status">Operations</div></div>
+      <div class="ds-av" style="width:36px;height:36px;border-radius:8px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#0f172a;font-size:.85rem;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;"><?= $manager_initials ?></div>
+      <div>
+        <div class="ds-hpill-name"><?= htmlspecialchars($manager_name) ?></div>
+        <div class="ds-hpill-status"><?= htmlspecialchars($manager_role) ?></div>
+      </div>
     </a>
   </div>
 </aside>
@@ -106,8 +115,8 @@ if ($res) while ($row = mysqli_fetch_assoc($res)) $notifications[] = $row;
       <span id="bellCount" style="position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;font-size:.65rem;font-weight:700;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;padding:0;"><?php echo $unread_count > 99 ? '99+' : $unread_count; ?></span>
     </a>
     <div class="ds-avbtn" id="dsAvBtn">
-      <div class="ds-av">HM</div>
-      <span class="ds-avname d-none d-sm-block">Hotel Manager</span>
+      <div class="ds-av"><?= $manager_initials ?></div>
+      <span class="ds-avname d-none d-sm-block"><?= htmlspecialchars($manager_firstname ?: $manager_name) ?></span>
       <i class="bi bi-chevron-down ms-1" style="font-size:.7rem;color:var(--mut)"></i>
       <div class="ds-dropdown" id="dsAvMenu">
         <a href="profile.php" class="ds-drop-item"><i class="bi bi-person-fill text-primary"></i> My Profile</a>
