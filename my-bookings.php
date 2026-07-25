@@ -304,7 +304,11 @@ foreach ($user_bookings as $b) {
     }
 
     // ── Status badge
-    if ($s_key === 'upcoming') {
+    $is_checked_in = (strtolower($b['booking_status'] ?? '') === 'checked_in');
+    if ($is_checked_in) {
+        $badge_cls = 'mb-badge--upcoming';
+        $badge_txt = '<i class="bi bi-person-check-fill me-1"></i>Checked In';
+    } elseif ($s_key === 'upcoming') {
         $badge_cls = 'mb-badge--upcoming';
         $badge_txt = '<i class="bi bi-check-circle-fill me-1"></i>Confirmed';
     } elseif ($s_key === 'completed') {
@@ -405,10 +409,10 @@ foreach ($user_bookings as $b) {
               <div class="mb-timeline__icon"><i class="bi bi-check-circle-fill"></i></div>
               <span class="mb-timeline__label">Confirmed</span>
             </div>
-            <div class="mb-timeline__line"></div>
-            <div class="mb-timeline__step mb-timeline__step--active">
-              <div class="mb-timeline__icon"><i class="bi bi-clock-fill"></i></div>
-              <span class="mb-timeline__label">Check-in Pending</span>
+            <div class="mb-timeline__line <?= $is_checked_in ? 'mb-timeline__line--done' : '' ?>"></div>
+            <div class="mb-timeline__step <?= $is_checked_in ? 'mb-timeline__step--done' : 'mb-timeline__step--active' ?>">
+              <div class="mb-timeline__icon"><i class="bi <?= $is_checked_in ? 'bi-check-circle-fill' : 'bi-clock-fill' ?>"></i></div>
+              <span class="mb-timeline__label"><?= $is_checked_in ? 'Checked In' : 'Check-in Pending' ?></span>
             </div>
           </div>
           <?php endif; ?>
@@ -650,6 +654,16 @@ foreach ($user_bookings as $b) {
 <div class="mb-toast-wrap" id="mbToastWrap" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+<script>
+  <?php if ($is_logged_in): ?>
+    window.PHP_USER = {
+      name: <?php echo json_encode($_SESSION['user_name'] ?? 'User'); ?>,
+      email: <?php echo json_encode($_SESSION['user_email'] ?? ''); ?>
+    };
+  <?php else: ?>
+    window.PHP_LOGGED_OUT = true;
+  <?php endif; ?>
+</script>
 <script src="navbar.js"></script>
 <script src="my-bookings.js"></script>
 </body>

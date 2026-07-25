@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 
 /* ─────────────────────────────────────────────
    VIEW DETAILS MODAL  (reads data-modal JSON)
@@ -126,11 +126,37 @@ document.getElementById('cancelYes')?.addEventListener('click', () => {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: 'booking_id=' + encodeURIComponent(bookingId),
   })
-  .then(r => r.json())
+  .then(async res => {
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (err) {
+      console.error('Non-JSON response from cancel_booking.php:', text);
+      throw new Error(text.replace(/<[^>]*>/g, '').trim() || 'Server returned invalid response');
+    }
+    if (!res.ok && data && data.message) {
+      throw new Error(data.message);
+    }
+    return data;
+  })
   .then(data => {
     if (data.success) {
       // Visually update card
       card.dataset.status = 'cancelled';
+
+      // Update data-modal JSON attribute for View Details modal
+      try {
+        if (card.dataset.modal) {
+          const m = JSON.parse(card.dataset.modal);
+          m.status = 'cancelled';
+          m.badgeText = 'Cancelled';
+          m.badgeClass = 'mb-badge--cancelled';
+          m.payStatus = 'Refund Pending';
+          m.payClass = 'mb-payment-status__badge--refund';
+          card.dataset.modal = JSON.stringify(m);
+        }
+      } catch (_) {}
 
       const badge = card.querySelector('.mb-badge');
       if (badge) {
@@ -153,7 +179,7 @@ document.getElementById('cancelYes')?.addEventListener('click', () => {
       // Update payment badge
       const payBadge = card.querySelector('.mb-payment-status__badge');
       if (payBadge) {
-        payBadge.textContent = 'Refund Initiated';
+        payBadge.textContent = 'Refund Pending';
         payBadge.className   = 'mb-payment-status__badge mb-payment-status__badge--refund';
       }
 
@@ -178,7 +204,7 @@ document.getElementById('cancelYes')?.addEventListener('click', () => {
       if (meta && !card.querySelector('.mb-cancel-reason')) {
         const reason = document.createElement('div');
         reason.className = 'mb-cancel-reason';
-        reason.innerHTML = '<i class="bi bi-info-circle-fill"></i> Booking cancelled · Refund Initiated';
+        reason.innerHTML = '<i class="bi bi-info-circle-fill"></i> Booking cancelled · Refund Pending';
         meta.insertAdjacentElement('afterend', reason);
       }
 
@@ -193,12 +219,13 @@ document.getElementById('cancelYes')?.addEventListener('click', () => {
       if (body) body.classList.add('mb-card__body--cancelled');
 
       updateSummary();
-      showToastMsg(data.message, 'warn');
+      filterCards();
+      showToastMsg(data.message || 'Booking cancelled successfully.', 'success');
     } else {
       showToastMsg(data.message || 'Could not cancel booking.', 'error');
     }
   })
-  .catch(() => showToastMsg('Network error. Please try again.', 'error'))
+  .catch(err => showToastMsg(err.message || 'Error processing request.', 'error'))
   .finally(() => {
     yesBtn.disabled = false;
     yesBtn.textContent = 'Yes, Cancel';

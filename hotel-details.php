@@ -809,6 +809,16 @@ $id_qs = 'id=' . $hotel_id . ($full_qs_str ? str_replace('?','&',$full_qs_str) :
 </button>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+<script>
+  <?php if ($is_logged_in): ?>
+    window.PHP_USER = {
+      name: <?php echo json_encode($_SESSION['user_name'] ?? 'User'); ?>,
+      email: <?php echo json_encode($_SESSION['user_email'] ?? ''); ?>
+    };
+  <?php else: ?>
+    window.PHP_LOGGED_OUT = true;
+  <?php endif; ?>
+</script>
 <script src="navbar.js"></script>
 <script>
 // State — persisted from URL

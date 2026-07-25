@@ -45,7 +45,7 @@ $user_initial   = $is_logged_in ? strtoupper(substr($_SESSION['user_firstname'] 
         <li class="nav-item"><a class="nav-link" href="destinations.php">Destinations</a></li>
         <li class="nav-item"><a class="nav-link" href="my-bookings.php">My Bookings</a></li>
         <li class="nav-item"><a class="nav-link" href="contact.php">Contact</a></li>
-         <li class="nav-item ms-lg-3">
+         <li class="nav-item ms-lg-3" id="navAuthSlot">
            <?php if ($is_logged_in): ?>
            <div class="dropdown">
              <a class="btn btn-warning btn-sm px-3 dropdown-toggle d-flex align-items-center gap-2" href="#" role="button" data-bs-toggle="dropdown">
@@ -581,6 +581,17 @@ function searchHotels() {
 }
 document.addEventListener('DOMContentLoaded',function(){const inp=document.getElementById('searchCity');if(inp)inp.addEventListener('keydown',e=>{if(e.key==='Enter')searchHotels();});});
 </script>
+<script>
+  <?php if ($is_logged_in): ?>
+    window.PHP_USER = {
+      name: <?php echo json_encode($_SESSION['user_name'] ?? 'User'); ?>,
+      email: <?php echo json_encode($_SESSION['user_email'] ?? ''); ?>
+    };
+  <?php else: ?>
+    window.PHP_LOGGED_OUT = true;
+  <?php endif; ?>
+</script>
+<script src="navbar.js"></script>
 <script src="search-state.js"></script>
 </body>
 </html>

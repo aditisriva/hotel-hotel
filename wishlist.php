@@ -652,6 +652,16 @@ $user_initial   = $is_logged_in ? strtoupper(substr($_SESSION['user_firstname'] 
 <div class="wl-toast-wrap" id="wlToastWrap" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+<script>
+  <?php if ($is_logged_in): ?>
+    window.PHP_USER = {
+      name: <?php echo json_encode($_SESSION['user_name'] ?? 'User'); ?>,
+      email: <?php echo json_encode($_SESSION['user_email'] ?? ''); ?>
+    };
+  <?php else: ?>
+    window.PHP_LOGGED_OUT = true;
+  <?php endif; ?>
+</script>
 <script src="navbar.js"></script>
 <script>
 'use strict';

@@ -150,8 +150,8 @@ function syncRoomsTableSchema($conn) {
       `coupon_discount`  DECIMAL(10,2) DEFAULT 0.00,
       `total_amount`     DECIMAL(10,2) NOT NULL,
       `payment_method`   VARCHAR(50) DEFAULT 'UPI',
-      `payment_status`   ENUM('pending','paid','failed','refunded') DEFAULT 'pending',
-      `booking_status`   ENUM('pending','confirmed','checked_in','checked_out','cancelled') DEFAULT 'confirmed',
+      `payment_status`   VARCHAR(50) DEFAULT 'pending',
+      `booking_status`   VARCHAR(50) DEFAULT 'confirmed',
       `special_requests` TEXT DEFAULT NULL,
       `arrival_time`     VARCHAR(30) DEFAULT NULL,
       `created_at`       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -162,6 +162,9 @@ function syncRoomsTableSchema($conn) {
       INDEX `idx_checkin`(`checkin_date`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
     mysqli_query($conn, $sql);
+
+    @mysqli_query($conn, "ALTER TABLE bookings MODIFY COLUMN `payment_status` VARCHAR(50) DEFAULT 'pending'");
+    @mysqli_query($conn, "ALTER TABLE bookings MODIFY COLUMN `booking_status` VARCHAR(50) DEFAULT 'confirmed'");
     
     $sql = "CREATE TABLE IF NOT EXISTS `reviews` (
       `review_id`        INT(11) UNSIGNED AUTO_INCREMENT PRIMARY KEY,

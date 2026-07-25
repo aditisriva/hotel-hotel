@@ -111,49 +111,75 @@ document.getElementById('cancelNo')?.addEventListener('click', () => {
 });
 
 document.getElementById('cancelYes')?.addEventListener('click', () => {
-  if (_cancelTarget) {
-    // Visually update card to cancelled state
-    _cancelTarget.setAttribute('data-status', 'cancelled');
+  if (!_cancelTarget) return;
+  const card = _cancelTarget;
+  const bookingId = card.dataset.bid || card.dataset.id || '';
+  const yesBtn = document.getElementById('cancelYes');
+  yesBtn.disabled = true;
+  yesBtn.textContent = 'Cancelling…';
 
-    const badge = _cancelTarget.querySelector('.mb-badge');
-    if (badge) {
-      badge.className = 'mb-badge mb-badge--cancelled';
-      badge.innerHTML = '<i class="bi bi-x-circle-fill me-1"></i>Cancelled';
+  fetch('cancel_booking.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'booking_id=' + encodeURIComponent(bookingId),
+  })
+  .then(async res => {
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (err) {
+      console.error('Non-JSON response from cancel_booking.php:', text);
+      throw new Error(text.replace(/<[^>]*>/g, '').trim() || 'Server returned invalid response');
     }
-
-    // Swap action buttons
-    const actions = _cancelTarget.querySelector('.mb-card__actions');
-    if (actions) {
-      actions.innerHTML = `
-        <button class="mb-btn mb-btn--ghost" onclick="openDetailsModal(this.closest('.mb-card'))">
-          <i class="bi bi-eye-fill"></i> View Details
-        </button>
-        <a href="hotels.php" class="mb-btn mb-btn--primary">
-          <i class="bi bi-arrow-repeat"></i> Book Again
-        </a>`;
+    if (!res.ok && data && data.message) {
+      throw new Error(data.message);
     }
-
-    // Add cancelled overlay to image
-    const imgWrap = _cancelTarget.querySelector('.mb-card__img-wrap');
-    if (imgWrap && !imgWrap.querySelector('.mb-card__cancelled-overlay')) {
-      const ov = document.createElement('div');
-      ov.className = 'mb-card__cancelled-overlay';
-      ov.setAttribute('aria-hidden', 'true');
-      imgWrap.appendChild(ov);
+    return data;
+  })
+  .then(data => {
+    if (data.success) {
+      card.setAttribute('data-status', 'cancelled');
+      const badge = card.querySelector('.mb-badge');
+      if (badge) {
+        badge.className = 'mb-badge mb-badge--cancelled';
+        badge.innerHTML = '<i class="bi bi-x-circle-fill me-1"></i>Cancelled';
+      }
+      const actions = card.querySelector('.mb-card__actions');
+      if (actions) {
+        actions.innerHTML = `
+          <button class="mb-btn mb-btn--ghost" onclick="openDetailsModal(this.closest('.mb-card'))">
+            <i class="bi bi-eye-fill"></i> View Details
+          </button>
+          <a href="hotels.php" class="mb-btn mb-btn--primary">
+            <i class="bi bi-arrow-repeat"></i> Book Again
+          </a>`;
+      }
+      const imgWrap = card.querySelector('.mb-card__img-wrap');
+      if (imgWrap && !imgWrap.querySelector('.mb-card__cancelled-overlay')) {
+        const ov = document.createElement('div');
+        ov.className = 'mb-card__cancelled-overlay';
+        ov.setAttribute('aria-hidden', 'true');
+        imgWrap.appendChild(ov);
+      }
+      updateSummary();
+      showToastMsg(data.message || 'Booking cancelled successfully.', 'success');
+      const payBadge = card.querySelector('.mb-payment-status__badge');
+      if (payBadge) {
+        payBadge.textContent = 'Refund Pending';
+        payBadge.className   = 'mb-payment-status__badge mb-payment-status__badge--refund';
+      }
+    } else {
+      showToastMsg(data.message || 'Could not cancel booking.', 'error');
     }
-
-    updateSummary();
-    showToastMsg('Booking cancelled. Refund will be processed in 5–7 business days.', 'warn');
-
-    // Update payment status badge on card
-    const payBadge = _cancelTarget.querySelector('.mb-payment-status__badge');
-    if (payBadge) {
-      payBadge.textContent = 'Refund Initiated';
-      payBadge.className   = 'mb-payment-status__badge mb-payment-status__badge--refund';
-    }
-  }
-  document.getElementById('cancelModal').classList.remove('open');
-  _cancelTarget = null;
+  })
+  .catch(err => showToastMsg(err.message || 'Error processing request.', 'error'))
+  .finally(() => {
+    yesBtn.disabled = false;
+    yesBtn.textContent = 'Yes, Cancel';
+    document.getElementById('cancelModal')?.classList.remove('open');
+    _cancelTarget = null;
+  });
 });
 
 // Close on backdrop click or Escape
